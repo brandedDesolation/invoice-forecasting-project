@@ -15,13 +15,13 @@ const Integrations = () => {
   ];
 
   return (
-    <section className="py-24 bg-gray-50">
+    <section className="py-24 bg-black">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center mb-16">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Seamlessly connect with any ERP system
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
+          <p className="mt-6 text-lg leading-8 text-gray-300">
             Vic.ai integrates seamlessly with all major ERP and accounting systems, offering AI-first capabilities through its flexible and scalable open API.
           </p>
         </div>
@@ -30,9 +30,9 @@ const Integrations = () => {
           {/* Central icon */}
           <div className="flex justify-center mb-12">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary-600 to-accent-600 rounded-2xl blur-lg opacity-30" />
-              <div className="relative bg-gradient-to-r from-primary-600 to-accent-600 rounded-2xl p-6">
-                <Plug className="h-12 w-12 text-white" />
+              <div className="absolute inset-0 bg-gradient-to-r from-white to-gray-300 rounded-2xl blur-lg opacity-30" />
+              <div className="relative bg-gradient-to-r from-white to-gray-300 rounded-2xl p-6">
+                <Plug className="h-12 w-12 text-black" />
               </div>
             </div>
           </div>
@@ -46,7 +46,7 @@ const Integrations = () => {
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
                 <div className="flex items-center gap-3">
-                  <Database className="h-6 w-6 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                  <Database className="h-6 w-6 text-gray-400 group-hover:text-black transition-colors" />
                   <span className="font-semibold text-gray-700 group-hover:text-gray-900 transition-colors">
                     {erp}
                   </span>
@@ -58,7 +58,7 @@ const Integrations = () => {
           <div className="mt-12 text-center">
             <a
               href="#"
-              className="inline-flex items-center text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+              className="inline-flex items-center text-sm font-semibold text-white hover:text-gray-300 transition-colors"
             >
               View all integrations →
             </a>
@@ -70,5 +70,10 @@ const Integrations = () => {
 };
 
 export default Integrations;
+
+
+
+
+
 
 

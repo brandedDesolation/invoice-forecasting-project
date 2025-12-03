@@ -1,15 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
   }
 
   body {
-    @apply bg-white text-gray-900;
+    @apply bg-black text-white font-['Montserrat',system-ui,-apple-system,sans-serif];
+  }
+
+  html {
+    scroll-behavior: smooth;
   }
 }
 
@@ -18,5 +24,36 @@
     text-wrap: balance;
   }
 }
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ffffff;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cccccc;
+}
+
+/* Navigation active state */
+.nav-active .nav-indicator {
+  background-color: #ffffff !important;
+  width: 64px !important;
+}
+
+.nav-active .nav-text {
+  color: #ffffff !important;
+}
+
+
+
 
 

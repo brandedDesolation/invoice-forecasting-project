@@ -23,13 +23,13 @@ const Testimonials = () => {
   ];
 
   return (
-    <section className="py-24 bg-white">
+    <section className="py-24 bg-black">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center mb-16">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
             Vic.ai customers future-proof AP with AI precision
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
+          <p className="mt-6 text-lg leading-8 text-gray-300">
             The Vic.ai autonomous platform transforms AP today, giving finance teams the accuracy, speed, and scalability to drive meaningful long-term growth.
           </p>
         </div>
@@ -41,28 +41,28 @@ const Testimonials = () => {
               className="relative bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 shadow-sm hover:shadow-lg transition-all border border-gray-100"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
-              <Quote className="h-10 w-10 text-primary-200 mb-6" />
+              <Quote className="h-10 w-10 text-white mb-6" />
               
-              <blockquote className="text-lg text-gray-700 leading-relaxed mb-6">
+              <blockquote className="text-lg text-black leading-relaxed mb-6">
                 "{testimonial.quote}"
               </blockquote>
 
               <div className="flex items-center justify-between border-t border-gray-200 pt-6">
                 <div>
-                  <div className="font-semibold text-gray-900">
+                  <div className="font-semibold text-black">
                     {testimonial.author}
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-700">
                     {testimonial.role}
                   </div>
                 </div>
 
                 {testimonial.stat && (
                   <div className="text-right">
-                    <div className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent">
+                    <div className="text-3xl font-bold bg-gradient-to-r from-black to-gray-600 bg-clip-text text-transparent">
                       {testimonial.stat.value}
                     </div>
-                    <div className="text-xs text-gray-600">
+                    <div className="text-xs text-gray-700">
                       {testimonial.stat.label}
                     </div>
                   </div>
@@ -77,5 +77,10 @@ const Testimonials = () => {
 };
 
 export default Testimonials;
+
+
+
+
+
 
 

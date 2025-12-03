@@ -9,32 +9,32 @@ const Products = () => {
       title: "Accounts payable",
       description:
         "Autonomous invoice processing that minimizes errors and speeds up the month-end close — so your team can focus on staying one step ahead.",
-      gradient: "from-blue-500 to-cyan-500",
+      gradient: "from-white to-gray-300",
     },
     {
       icon: CreditCard,
       title: "Expense management",
       description:
         "Vic.ai offers unparalleled AI-driven autonomy in managing corporate expenses. With VicCard™ and Expense Management, you can get a unified view of non-payroll corporate expenses in one place.",
-      gradient: "from-purple-500 to-pink-500",
+      gradient: "from-gray-300 to-gray-500",
     },
     {
       icon: BarChart3,
       title: "Analytics and insights",
       description:
         "Unlock always-on performance insights across invoice workflows, team productivity, and business entities — empowering intelligent action and better operational outcomes.",
-      gradient: "from-orange-500 to-red-500",
+      gradient: "from-gray-500 to-gray-700",
     },
   ];
 
   return (
-    <section className="py-24 bg-gray-50">
+    <section className="py-24 bg-black">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center mb-16">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
             The leading AI platform for accounts payable
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
+          <p className="mt-6 text-lg leading-8 text-gray-300">
             With Vic.ai, put your AP on autopilot, gain real-time insights, manage spend, and achieve unmatched accuracy and efficiency.
           </p>
         </div>
@@ -51,15 +51,15 @@ const Products = () => {
                 <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${product.gradient} mb-6`}>
                   <Icon className="h-6 w-6 text-white" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-4">
+                <h3 className="text-xl font-bold text-black mb-4">
                   {product.title}
                 </h3>
-                <p className="text-gray-600 mb-6 leading-relaxed">
+                <p className="text-gray-700 mb-6 leading-relaxed">
                   {product.description}
                 </p>
                 <a
                   href="#"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-primary-600 group-hover:gap-3 transition-all"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-black group-hover:gap-3 transition-all"
                 >
                   Learn more
                   <ArrowRight className="h-4 w-4" />
@@ -74,5 +74,10 @@ const Products = () => {
 };
 
 export default Products;
+
+
+
+
+
 
 

@@ -106,13 +106,13 @@ class InvoiceOCRService:
         """Extract date from text"""
         patterns = {
             "issue": [
-                r'Fatura\s*Tarihi[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-                r'Invoice\s*Date[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-                r'Düzenleme\s*Tarihi[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                r'Fatura\s*Tarihi[:\s\[\(]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                r'Invoice\s*Date[:\s\[\(]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                r'Düzenleme\s*Tarihi[:\s\[\(]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
             ],
             "due": [
-                r'Son\s*Ödeme\s*Tarihi[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-                r'Due\s*Date[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                r'Son\s*Ödeme\s*Tarihi[:\s\[\(]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                r'Due\s*Date[:\s\[\(]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
             ]
         }
         
@@ -285,16 +285,18 @@ class InvoiceOCRService:
         }
         
         # Extract customer name - usually after "SAYIN" in Turkish invoices
-        # Look for text between SAYIN and TİCARET/LİMİTED/SON ÖDEME
+        # Look for text between SAYIN and next address/metadata keyword
         customer_patterns = [
             r'SAYIN\s+([A-ZÇĞIİÖŞÜ][A-ZÇĞIİÖŞÜ\s]+?)(?=\s+(?:TİCARET|LİMİTED|SİRKETİ|SON\s+ÖDEME))',
             r'SAYIN\s+([A-ZÇĞIİÖŞÜ][A-ZÇĞIİÖŞÜ\s]{10,}?)(?=\s+(?:SON\s+ÖDEME|LİMİTED))',
             r'SAYIN\s+([A-ZÇĞIİÖŞÜ][A-ZÇĞIİÖŞÜ\s]+?)(?=\s+SON\s+ÖDEME)',
             # Fallback: capture everything between SAYIN and next all-caps word followed by date pattern
             r'SAYIN\s+([A-ZÇĞIİÖŞÜ][A-ZÇĞIİÖŞÜ\s]+?)(?=\s+[A-ZÇĞIİÖŞÜ]+\s+\d{1,2}/\d{1,2}/\d{4})',
+            # Allow noisy text between SAYIN and the actual name (e.g., OCR artifacts)
+            r'SAYIN\s+(?:.{0,40}?)([A-ZÇĞIİÖŞÜ][A-ZÇĞIİÖŞÜ\s]+?)(?=\s+(?:MAH|CAD|SOK|SK|FATURA|ÖZEL|SENARYO|VERGİ|SON|Plaka|Adres|$))',
         ]
         for pattern in customer_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match:
                 name = match.group(1).strip()
                 # Clean up the name

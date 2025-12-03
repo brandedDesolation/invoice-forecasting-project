@@ -14,7 +14,7 @@ const RolesSection = () => {
         { icon: BarChart2, text: "Real-time financial insights" },
         { icon: Shield, text: "Prevent fraud" },
       ],
-      gradient: "from-blue-600 to-cyan-600",
+      gradient: "from-white to-gray-300",
     },
     {
       title: "For Controllers",
@@ -26,7 +26,7 @@ const RolesSection = () => {
         { icon: TrendingUp, text: "Improve AP efficiency" },
         { icon: Shield, text: "Reduce errors" },
       ],
-      gradient: "from-purple-600 to-pink-600",
+      gradient: "from-gray-300 to-gray-500",
     },
     {
       title: "For AP Managers",
@@ -38,21 +38,21 @@ const RolesSection = () => {
         { icon: Shield, text: "Prevent overpayments" },
         { icon: Users, text: "Improve vendor relations" },
       ],
-      gradient: "from-orange-600 to-red-600",
+      gradient: "from-gray-500 to-gray-700",
     },
   ];
 
   return (
-    <section className="py-24 bg-gray-50">
+    <section className="py-24 bg-black">
       <div className="mx-auto max-w-7xl px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center mb-16">
-          <p className="text-base font-semibold leading-7 text-primary-600">
+          <p className="text-base font-semibold leading-7 text-white">
             CFOs, Controllers, and AP Managers
           </p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-5xl">
             Purpose-built AI for finance leaders
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
+          <p className="mt-6 text-lg leading-8 text-gray-300">
             Control. Efficiency. ROI. Free your team from manual work and make better financial decisions, faster.
           </p>
         </div>
@@ -66,11 +66,11 @@ const RolesSection = () => {
             >
               <div className={`absolute top-0 left-0 w-full h-1 rounded-t-2xl bg-gradient-to-r ${role.gradient}`} />
               
-              <h3 className="text-2xl font-bold text-gray-900 mb-4 mt-4">
+              <h3 className="text-2xl font-bold text-black mb-4 mt-4">
                 {role.title}
               </h3>
               
-              <p className="text-gray-600 mb-8 leading-relaxed">
+              <p className="text-gray-700 mb-8 leading-relaxed">
                 {role.description}
               </p>
 
@@ -82,7 +82,7 @@ const RolesSection = () => {
                       <div className={`flex-shrink-0 rounded-lg bg-gradient-to-br ${role.gradient} p-1.5`}>
                         <Icon className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-sm text-gray-700 leading-tight">
+                      <span className="text-sm text-gray-800 leading-tight">
                         {benefit.text}
                       </span>
                     </div>
@@ -92,7 +92,7 @@ const RolesSection = () => {
 
               <a
                 href="#"
-                className="inline-flex items-center text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+                className="inline-flex items-center text-sm font-semibold text-black hover:text-gray-600 transition-colors"
               >
                 Learn more →
               </a>
@@ -105,5 +105,10 @@ const RolesSection = () => {
 };
 
 export default RolesSection;
+
+
+
+
+
 
 
