@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { authService } from "../lib/auth";
 import { 
   LayoutDashboard, 
   FileText, 
@@ -18,7 +20,13 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ children, currentPage = "dashboard" }: AdminLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setUser(authService.getCurrentUser());
+  }, []);
 
   const navigation = [
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
@@ -28,144 +36,144 @@ export default function AdminLayout({ children, currentPage = "dashboard" }: Adm
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    window.location.href = '/';
+    authService.logout();
+    window.location.href = '/admin/login';
   };
 
+  const currentNavItem = navigation.find(item => pathname === item.href || pathname?.startsWith(item.href + '/'));
+
   return (
-    <div className="min-h-screen bg-black leading-relaxed text-gray-300 antialiased selection:bg-white selection:text-black">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className="fixed left-0 top-0 h-full w-64 bg-black">
-            <div className="flex items-center justify-between p-4 border-b border-white/20">
-              <h1 className="text-xl font-bold text-white">Invoice Forecast</h1>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="text-white/60 hover:text-white"
-              >
-                <X className="h-6 w-6" />
-              </button>
+    <div className="min-h-screen bg-black text-gray-300">
+      {/* Top Navigation Bar */}
+      <nav className="sticky top-0 z-50 border-b border-gray-800 bg-black/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            {/* Logo/Title */}
+            <div className="flex items-center">
+              <Link href="/admin/dashboard" className="text-xl font-bold text-white">
+                Invoice Forecast
+              </Link>
             </div>
-            <nav className="mt-5 px-2 space-y-1">
+
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex md:items-center md:space-x-1">
               {navigation.map((item) => {
-                const isActive = currentPage === item.href.split('/').pop();
+                const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
                     className={`${
                       isActive
-                        ? 'bg-white/20 text-white border-l-4 border-white'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                    } group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors`}
-                    onClick={() => setSidebarOpen(false)}
+                        ? 'text-white border-b-2 border-white'
+                        : 'text-gray-400 hover:text-white'
+                    } px-4 py-2 text-sm font-medium transition-colors`}
                   >
-                    <item.icon className="mr-3 h-5 w-5" />
                     {item.name}
                   </Link>
                 );
               })}
-            </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/20">
-              <div className="flex items-center mb-3">
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
-                    <span className="text-sm font-medium text-white">A</span>
-                  </div>
+            </div>
+
+            {/* Right side - User & Dropdown */}
+            <div className="flex items-center space-x-4">
+              {/* User Info */}
+              <div className="hidden sm:flex sm:items-center sm:space-x-3">
+                <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
+                  <span className="text-sm font-medium text-white">
+                    {user?.name?.charAt(0).toUpperCase() || 'A'}
+                  </span>
                 </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-white">Admin User</p>
-                  <p className="text-xs text-white/60">admin@invoiceforecast.com</p>
+                <div className="hidden lg:block">
+                  <p className="text-sm font-medium text-white">{user?.name || 'Admin'}</p>
+                  <p className="text-xs text-gray-400">{user?.email || 'admin@example.com'}</p>
                 </div>
               </div>
+
+              {/* Mobile Menu Button */}
+              <div className="md:hidden">
+                <button
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </button>
+              </div>
+
+              {/* Logout Button (Desktop) */}
               <button
                 onClick={handleLogout}
-                className="flex items-center w-full px-2 py-2 text-sm font-medium text-white/70 rounded-md hover:bg-white/10 hover:text-white transition-colors"
+                className="hidden md:flex items-center text-gray-400 hover:text-white transition-colors"
+                title="Logout"
               >
-                <LogOut className="mr-3 h-4 w-4" />
-                Sign out
+                <LogOut className="h-5 w-5" />
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      <div className="mx-auto min-h-screen max-w-screen-xl px-6 py-12 font-sans md:px-12 md:py-20 lg:px-24 lg:py-0">
-        <div className="lg:flex lg:justify-between lg:gap-8">
-          {/* Main Content */}
-          <main className="pt-24 lg:w-3/5 lg:py-24">
-            <div className="mb-8">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden text-gray-400 hover:text-white"
-              >
-                <Menu className="h-6 w-6" />
-              </button>
-            </div>
-            {children}
-          </main>
-
-          {/* Right Sidebar */}
-          <header className="lg:sticky lg:top-0 lg:flex lg:max-h-screen lg:w-2/5 lg:flex-col lg:justify-between lg:py-16">
-            <div>
-              <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
-                <Link href="/admin/dashboard">Admin Dashboard</Link>
-              </h1>
-              <h2 className="mt-8 text-lg font-medium tracking-tight text-gray-100 sm:text-xl">
-                Invoice Forecasting System
-              </h2>
-              <p className="mt-8 max-w-xs leading-normal text-gray-400">
-                Manage invoices, customers, and analytics for your business.
-              </p>
-
-              {/* Navigation */}
-              <nav className="nav hidden lg:block" aria-label="Admin navigation">
-                <ul className="mt-6 w-max">
-                  {navigation.map((item) => {
-                    const isActive = currentPage === item.href.split('/').pop();
-                    return (
-                      <li key={item.name}>
-                        <Link
-                          className={`group flex items-center py-4 ${isActive ? "nav-active" : ""}`}
-                          href={item.href}
-                        >
-                          <span className="nav-indicator mr-4 h-px w-8 bg-white/40 transition-all group-hover:w-16 group-hover:bg-white group-focus-visible:w-16 motion-reduce:transition-none"></span>
-                          <span className="nav-text text-xs font-bold uppercase tracking-widest text-white/60 group-hover:text-white group-focus-visible:text-white">
-                            {item.name}
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </nav>
-            </div>
-
-            {/* User Info */}
-            <div className="mt-8">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
-                    <span className="text-lg font-medium text-white">A</span>
+          {/* Mobile Dropdown Menu */}
+          {menuOpen && (
+            <div className="md:hidden border-t border-gray-800">
+              <div className="px-2 pt-2 pb-3 space-y-1">
+                {navigation.map((item) => {
+                  const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className={`${
+                        isActive
+                          ? 'bg-white/10 text-white'
+                          : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                      } group flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors`}
+                    >
+                      <item.icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+                <div className="pt-4 border-t border-gray-800">
+                  <div className="flex items-center px-3 py-2">
+                    <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30">
+                      <span className="text-sm font-medium text-white">
+                        {user?.name?.charAt(0).toUpperCase() || 'A'}
+                      </span>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-white">{user?.name || 'Admin'}</p>
+                      <p className="text-xs text-gray-400">{user?.email || 'admin@example.com'}</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center px-3 py-2 text-base font-medium text-gray-400 hover:bg-white/5 hover:text-white rounded-md transition-colors"
+                  >
+                    <LogOut className="mr-3 h-5 w-5" />
+                    Sign out
+                  </button>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-white">Admin User</p>
-                  <p className="text-xs text-gray-400">admin@invoiceforecast.com</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="ml-auto text-gray-400 hover:text-white transition-colors"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
               </div>
             </div>
-          </header>
+          )}
         </div>
-      </div>
+      </nav>
+
+      {/* Main Content - Full Width */}
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Title */}
+        {currentNavItem && (
+          <div className="mb-8">
+            <div className="flex items-center space-x-2 text-gray-400 mb-2">
+              <currentNavItem.icon className="h-5 w-5" />
+              <span className="text-sm">{currentNavItem.name}</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Page Content */}
+        {children}
+      </main>
     </div>
   );
 }

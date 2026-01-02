@@ -5,16 +5,18 @@ Upload router for invoice image processing
 import os
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form
+from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime
+from datetime import datetime, date
+from dateutil import parser as date_parser
 
 from ..database import get_db
 from ..models import Invoice, Supplier, Customer, InvoiceItem
 from ..schemas import InvoiceUploadResponse, ExtractedInvoiceData
-from ..services.ocr_service import get_ocr_service
+# Lazy import for OCR service to avoid startup errors if easyocr is not installed
+# from ..services.ocr_service import get_ocr_service
 
 router = APIRouter()
 
@@ -128,11 +130,28 @@ async def upload_invoice(
         raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
     
     try:
-        # Initialize OCR service
-        ocr_service = get_ocr_service()
+        # Initialize OCR service (lazy import)
+        try:
+            from ..services.ocr_service import get_ocr_service
+            ocr_service = get_ocr_service()
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"OCR service not available. Please install easyocr: {str(e)}"
+            )
         
         # Process invoice with OCR
-        extracted_data = ocr_service.process_invoice(str(file_path))
+        try:
+            extracted_data = ocr_service.process_invoice(str(file_path))
+        except Exception as ocr_error:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"OCR processing error: {str(ocr_error)}")
+            print(f"Traceback: {error_trace}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"OCR processing failed: {str(ocr_error)}"
+            )
         
         # Get or create supplier
         supplier = get_or_create_supplier(db, extracted_data.get("supplier", {}))
@@ -148,14 +167,42 @@ async def upload_invoice(
                 Invoice.supplier_id == supplier.id
             ).first()
         
+        # Helper function to parse date safely
+        def parse_date_safe(date_value):
+            if date_value is None:
+                return None
+            if isinstance(date_value, datetime):
+                return date_value.date()
+            if isinstance(date_value, date):
+                return date_value
+            if isinstance(date_value, str):
+                try:
+                    # Try parsing common date formats
+                    parsed = date_parser.parse(date_value, dayfirst=True)
+                    return parsed.date()
+                except:
+                    return None
+            return None
+        
+        # Get dates safely - OCR service returns date objects or None
+        issue_date_raw = extracted_data.get("issue_date")
+        due_date_raw = extracted_data.get("due_date")
+        
+        issue_date = parse_date_safe(issue_date_raw) if issue_date_raw else datetime.now().date()
+        due_date = parse_date_safe(due_date_raw) if due_date_raw else None
+        
+        # Ensure issue_date is never None (required field)
+        if issue_date is None:
+            issue_date = datetime.now().date()
+        
         if existing_invoice:
             # Update existing invoice
             invoice = existing_invoice
-            invoice.issue_date = extracted_data.get("issue_date") or invoice.issue_date
-            invoice.due_date = extracted_data.get("due_date") or invoice.due_date
-            invoice.subtotal = extracted_data.get("amounts", {}).get("subtotal", 0.0)
-            invoice.tax = extracted_data.get("amounts", {}).get("tax", 0.0)
-            invoice.total = extracted_data.get("amounts", {}).get("total", 0.0)
+            invoice.issue_date = issue_date
+            invoice.due_date = due_date or invoice.due_date
+            invoice.subtotal = extracted_data.get("amounts", {}).get("subtotal", 0.0) or 0.0
+            invoice.tax = extracted_data.get("amounts", {}).get("tax", 0.0) or 0.0
+            invoice.total = extracted_data.get("amounts", {}).get("total", 0.0) or 0.0
             invoice.image_path = str(file_path)
             invoice.raw_text = extracted_data.get("raw_text")
             invoice.ocr_confidence = extracted_data.get("ocr_confidence")
@@ -164,11 +211,11 @@ async def upload_invoice(
             # Create new invoice
             invoice = Invoice(
                 invoice_number=extracted_data.get("invoice_number") or f"INV-{timestamp}",
-                issue_date=extracted_data.get("issue_date") or datetime.now().date(),
-                due_date=extracted_data.get("due_date"),
-                subtotal=extracted_data.get("amounts", {}).get("subtotal", 0.0),
-                tax=extracted_data.get("amounts", {}).get("tax", 0.0),
-                total=extracted_data.get("amounts", {}).get("total", 0.0),
+                issue_date=issue_date,
+                due_date=due_date,
+                subtotal=extracted_data.get("amounts", {}).get("subtotal", 0.0) or 0.0,
+                tax=extracted_data.get("amounts", {}).get("tax", 0.0) or 0.0,
+                total=extracted_data.get("amounts", {}).get("total", 0.0) or 0.0,
                 customer_id=customer.id,
                 supplier_id=supplier.id,
                 image_path=str(file_path),
@@ -189,20 +236,32 @@ async def upload_invoice(
                 ).delete()
             
             for item_data in items_data:
-                item = InvoiceItem(
-                    invoice_id=invoice.id,
-                    description=item_data.get("description", ""),
-                    quantity=item_data.get("quantity", 1.0),
-                    unit_price=item_data.get("unit_price"),
-                    discount=item_data.get("discount", 0.0),
-                    tax_rate=item_data.get("tax_rate", 0.0),
-                    tax_amount=item_data.get("tax_amount", 0.0),
-                    total=item_data.get("total", 0.0)
-                )
-                db.add(item)
+                try:
+                    item = InvoiceItem(
+                        invoice_id=invoice.id,
+                        description=item_data.get("description", "") or "",
+                        quantity=float(item_data.get("quantity", 1.0)) if item_data.get("quantity") is not None else 1.0,
+                        unit_price=float(item_data.get("unit_price", 0.0)) if item_data.get("unit_price") is not None else None,
+                        discount=float(item_data.get("discount", 0.0)) if item_data.get("discount") is not None else 0.0,
+                        tax_rate=float(item_data.get("tax_rate", 0.0)) if item_data.get("tax_rate") is not None else 0.0,
+                        tax_amount=float(item_data.get("tax_amount", 0.0)) if item_data.get("tax_amount") is not None else 0.0,
+                        total=float(item_data.get("total", 0.0)) if item_data.get("total") is not None else 0.0
+                    )
+                    db.add(item)
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Could not add invoice item: {e}")
+                    # Continue with other items
         
-        db.commit()
-        db.refresh(invoice)
+        try:
+            db.commit()
+            db.refresh(invoice)
+        except Exception as db_error:
+            db.rollback()
+            print(f"Database error: {db_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error while saving invoice: {str(db_error)}"
+            )
         
         # Prepare response
         response_data = ExtractedInvoiceData(
@@ -225,14 +284,22 @@ async def upload_invoice(
         )
         
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error processing invoice: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        
         # Update invoice status if it was created
         if 'invoice' in locals() and invoice.id:
-            invoice.extraction_status = "failed"
-            db.commit()
+            try:
+                invoice.extraction_status = "failed"
+                db.commit()
+            except:
+                db.rollback()
         
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing invoice: {str(e)}"
+            detail=f"Error processing invoice: {str(e)}. Check server logs for details."
         )
 
 
@@ -276,6 +343,23 @@ async def get_invoice_image_info(invoice_id: int, db: Session = Depends(get_db))
         "path": invoice.image_path or "",
         "has_image": has_image
     }
+
+
+@router.get("/invoice-image/{invoice_id}/file")
+async def get_invoice_image_file(invoice_id: int, db: Session = Depends(get_db)):
+    """Serve the actual invoice image file"""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if not invoice.image_path or not os.path.exists(invoice.image_path):
+        raise HTTPException(status_code=404, detail="Invoice image not found")
+    
+    return FileResponse(
+        invoice.image_path,
+        media_type="image/jpeg",  # Default, will be auto-detected
+        filename=Path(invoice.image_path).name
+    )
 
 
 @router.post("/invoice-image/{invoice_id}")
@@ -353,6 +437,197 @@ async def delete_invoice_image(invoice_id: int, db: Session = Depends(get_db)):
         "message": "Invoice image deleted successfully",
         "success": True
     }
+
+
+@router.post("/ocr-only")
+async def process_ocr_only(
+    file: UploadFile = File(...)
+):
+    """
+    Process invoice image with OCR only - returns extracted data without saving
+    
+    Use this endpoint to extract data and allow user to review/edit before saving.
+    """
+    # Validate file type
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".pdf"}
+    file_ext = Path(file.filename).suffix.lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    # Save uploaded file temporarily
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{timestamp}_{file.filename}"
+    file_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+    
+    try:
+        # Initialize OCR service (lazy import)
+        try:
+            from ..services.ocr_service import get_ocr_service
+            ocr_service = get_ocr_service()
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"OCR service not available: {str(e)}"
+            )
+        
+        # Process invoice with OCR
+        extracted_data = ocr_service.process_invoice(str(file_path))
+        
+        # Format dates as strings for JSON response
+        def format_date(d):
+            if d is None:
+                return None
+            if hasattr(d, 'isoformat'):
+                return d.isoformat()
+            return str(d)
+        
+        return {
+            "invoice_number": extracted_data.get("invoice_number"),
+            "issue_date": format_date(extracted_data.get("issue_date")),
+            "due_date": format_date(extracted_data.get("due_date")),
+            "amounts": extracted_data.get("amounts", {}),
+            "supplier": extracted_data.get("supplier", {}),
+            "customer": extracted_data.get("customer", {}),
+            "items": extracted_data.get("items", []),
+            "raw_text": extracted_data.get("raw_text", ""),
+            "ocr_confidence": extracted_data.get("ocr_confidence", 0),
+            "ocr_backend": extracted_data.get("ocr_backend", "unknown"),
+            "temp_file_path": str(file_path)  # Keep track of the temp file
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"OCR processing error: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"OCR processing failed: {str(e)}"
+        )
+
+
+@router.post("/invoice-with-data")
+async def save_invoice_with_data(
+    file: UploadFile = File(...),
+    invoice_number: str = Form(None),
+    issue_date: str = Form(None),
+    due_date: str = Form(None),
+    subtotal: float = Form(0.0),
+    tax: float = Form(0.0),
+    total: float = Form(0.0),
+    customer_name: str = Form(None),
+    customer_tax_id: str = Form(None),
+    supplier_name: str = Form(None),
+    supplier_tax_id: str = Form(None),
+    customer_id: int = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Save invoice with user-provided data (after OCR review/correction)
+    """
+    
+    # Validate file type
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".pdf"}
+    file_ext = Path(file.filename).suffix.lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    # Save uploaded file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{timestamp}_{file.filename}"
+    file_path = UPLOAD_DIR / safe_filename
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving file: {str(e)}")
+    
+    try:
+        # Get or create customer
+        if customer_id:
+            customer = db.query(Customer).filter(Customer.id == customer_id).first()
+            if not customer:
+                raise HTTPException(status_code=404, detail="Selected customer not found")
+        elif customer_name:
+            customer = get_or_create_customer(db, {
+                "name": customer_name,
+                "tax_id": customer_tax_id
+            })
+        else:
+            customer = get_or_create_customer(db, {"name": "Unknown Customer"})
+        
+        # Get or create supplier
+        if supplier_name:
+            supplier = get_or_create_supplier(db, {
+                "name": supplier_name,
+                "tax_id": supplier_tax_id
+            })
+        else:
+            supplier = get_or_create_supplier(db, {"name": "Unknown Supplier"})
+        
+        # Parse dates
+        def parse_date_safe(date_str):
+            if not date_str:
+                return None
+            try:
+                parsed = date_parser.parse(date_str, dayfirst=True)
+                return parsed.date()
+            except:
+                return None
+        
+        parsed_issue_date = parse_date_safe(issue_date) or datetime.now().date()
+        parsed_due_date = parse_date_safe(due_date)
+        
+        # Create invoice
+        invoice = Invoice(
+            invoice_number=invoice_number or f"INV-{timestamp}",
+            issue_date=parsed_issue_date,
+            due_date=parsed_due_date,
+            subtotal=subtotal or 0.0,
+            tax=tax or 0.0,
+            total=total or 0.0,
+            customer_id=customer.id,
+            supplier_id=supplier.id,
+            image_path=str(file_path),
+            extraction_status="completed"
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        return {
+            "success": True,
+            "message": "Invoice saved successfully",
+            "invoice_id": invoice.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        import traceback
+        print(f"Error saving invoice: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error saving invoice: {str(e)}"
+        )
 
 
 @router.get("/status")

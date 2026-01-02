@@ -57,10 +57,18 @@ async def update_supplier(supplier_id: int, supplier_update: SupplierUpdate, db:
 
 @router.delete("/{supplier_id}")
 async def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
-    """Delete a supplier"""
+    """Delete a supplier (only if they have no invoices)"""
     db_supplier = db.query(models.Supplier).filter(models.Supplier.id == supplier_id).first()
     if not db_supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
+    
+    # Check if supplier has any invoices
+    invoice_count = db.query(models.Invoice).filter(models.Invoice.supplier_id == supplier_id).count()
+    if invoice_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete supplier. They have {invoice_count} invoice(s). Please delete all invoices first or keep the supplier for historical records."
+        )
     
     db.delete(db_supplier)
     db.commit()

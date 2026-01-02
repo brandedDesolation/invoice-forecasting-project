@@ -1,68 +1,141 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import AdminLayout from "../../../components/AdminLayout";
-import { TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, Activity, Database, Zap } from "lucide-react";
-
-const analytics = [
-  {
-    title: "Payment Trends",
-    value: "+12%",
-    change: "vs last month",
-    trend: "up",
-    icon: TrendingUp,
-  },
-  {
-    title: "Overdue Invoices",
-    value: "-8%",
-    change: "vs last month",
-    trend: "down",
-    icon: TrendingDown,
-  },
-  {
-    title: "Average Payment Time",
-    value: "23 days",
-    change: "vs 28 days last month",
-    trend: "up",
-    icon: Calendar,
-  },
-  {
-    title: "Total Revenue",
-    value: "₺2.4M",
-    change: "+15% vs last quarter",
-    trend: "up",
-    icon: DollarSign,
-  },
-];
-
-const insights = [
-  {
-    title: "Payment Efficiency",
-    description: "Average payment time decreased by 5 days compared to last month, indicating improved cash flow management.",
-    trend: "positive",
-    icon: Activity,
-  },
-  {
-    title: "Overdue Management",
-    description: "12 invoices are currently overdue. Consider implementing automated follow-up systems for better collection rates.",
-    trend: "warning",
-    icon: BarChart3,
-  },
-  {
-    title: "Revenue Growth",
-    description: "Q1 revenue is 15% higher than Q4, indicating strong business growth and market expansion opportunities.",
-    trend: "positive",
-    icon: TrendingUp,
-  },
-  {
-    title: "Data Processing",
-    description: "Analytics engine processed 1,247 invoices this month with 99.2% accuracy in payment predictions.",
-    trend: "neutral",
-    icon: Database,
-  },
-];
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Calendar, 
+  BarChart3, 
+  Activity, 
+  Database, 
+  Zap,
+  Loader2
+} from "lucide-react";
+import { 
+  analyticsApi, 
+  AnalyticsOverview, 
+  RevenueMetrics, 
+  InvoiceMetrics, 
+  getErrorMessage 
+} from "../../../lib/api";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts";
 
 export default function AnalyticsPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>("");
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
+  const [timeRange, setTimeRange] = useState(30);
+  const [useCustomRange, setUseCustomRange] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        
+        let data;
+        if (useCustomRange && customStartDate && customEndDate) {
+          data = await analyticsApi.getOverview(30, customStartDate, customEndDate);
+        } else {
+          data = await analyticsApi.getOverview(timeRange);
+        }
+        
+        setOverview(data);
+      } catch (err) {
+        console.error("Error fetching analytics:", err);
+        setError(getErrorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, [timeRange, useCustomRange, customStartDate, customEndDate]);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('tr-TR', {
+      style: 'currency',
+      currency: 'TRY',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatPercent = (value: number) => {
+    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+  };
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <AdminLayout currentPage="analytics">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-6 w-6 animate-spin text-white" />
+              <span className="text-white">Loading analytics...</span>
+            </div>
+          </div>
+        </AdminLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  if (error) {
+    return (
+      <ProtectedRoute>
+        <AdminLayout currentPage="analytics">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="text-white mb-4">Error loading analytics</div>
+              <div className="text-white/70 mb-4">{error}</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-white text-black rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        </AdminLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  if (!overview) {
+    return null;
+  }
+
+  // Prepare chart data
+  const revenueForecastData = overview.revenue_forecast.map(forecast => ({
+    date: new Date(forecast.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
+    value: forecast.value,
+    fullDate: forecast.date
+  }));
+
+  // Revenue breakdown for pie/bar chart
+  const revenueBreakdown = [
+    { name: 'Pending', value: overview.revenue.pending_revenue, color: '#f59e0b' },
+    { name: 'Overdue', value: overview.revenue.overdue_revenue, color: '#ef4444' },
+  ].filter(item => item.value > 0);
+
   return (
     <ProtectedRoute>
       <AdminLayout currentPage="analytics">
@@ -74,8 +147,49 @@ export default function AnalyticsPage() {
           
           {/* Page Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Analytics & Insights</h1>
-            <p className="text-white/70">Analyze your business data and gain valuable insights</p>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Analytics & Insights</h1>
+                <p className="text-white/70">Analyze your business data and gain valuable insights</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <select
+                  value={useCustomRange ? "custom" : timeRange}
+                  onChange={(e) => {
+                    if (e.target.value === "custom") {
+                      setUseCustomRange(true);
+                    } else {
+                      setUseCustomRange(false);
+                      setTimeRange(Number(e.target.value));
+                    }
+                  }}
+                  className="px-4 py-2 border border-white/20 rounded-md bg-transparent text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                  <option value={365}>Last year</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+                {useCustomRange && (
+                  <>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="px-3 py-2 border border-white/20 rounded-md bg-transparent text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+                    />
+                    <span className="text-gray-400">to</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="px-3 py-2 border border-white/20 rounded-md bg-transparent text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <div>
@@ -88,29 +202,47 @@ export default function AnalyticsPage() {
             <div className="mb-32">
               <h3 className="text-xl font-semibold text-white mb-10">Key Metrics</h3>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                {analytics.map((item) => (
-                  <div
-                    key={item.title}
-                    className="bg-white/10 p-6 rounded-lg border border-white/20 hover:border-white/40 transition-all duration-300 w-full overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between mb-4 w-full">
-                      <div className="flex items-center min-w-0 flex-1">
-                        <item.icon className="h-6 w-6 mr-4 text-white flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-white/70 mb-1 truncate" title={item.title}>{item.title}</p>
-                          <p className="text-2xl font-bold text-white" title={item.value}>
-                            {item.value}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="pt-3 border-t border-white/20 w-full">
-                      <span className="text-sm text-white" title={item.change}>
-                        {item.change}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 font-medium mb-4">Revenue Growth</p>
+                  <p className="text-3xl font-bold text-white mb-4">
+                    {overview.revenue.revenue_change_percent !== undefined 
+                      ? formatPercent(overview.revenue.revenue_change_percent)
+                      : 'N/A'}
+                  </p>
+                  <span className="text-sm text-gray-500">vs last period</span>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 font-medium mb-4">Overdue Invoices</p>
+                  <p className="text-3xl font-bold text-white mb-4">
+                    {overview.invoices.overdue_invoices}
+                  </p>
+                  <span className="text-sm text-gray-500">
+                    {formatCurrency(overview.revenue.overdue_revenue)} overdue
+                  </span>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 font-medium mb-4">Pending Invoices</p>
+                  <p className="text-3xl font-bold text-white mb-4">
+                    {overview.invoices.pending_invoices}
+                  </p>
+                  <span className="text-sm text-gray-500">
+                    {formatCurrency(overview.revenue.pending_revenue)} pending
+                  </span>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-400 font-medium mb-4">Total Revenue</p>
+                  <p className="text-3xl font-bold text-white mb-4 truncate" title={formatCurrency(overview.revenue.total_revenue)}>
+                    {formatCurrency(overview.revenue.total_revenue)}
+                  </p>
+                  <span className="text-sm text-gray-500">
+                    {overview.revenue.revenue_change_percent !== undefined 
+                      ? `${formatPercent(overview.revenue.revenue_change_percent)} vs last period`
+                      : 'All time'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -118,59 +250,172 @@ export default function AnalyticsPage() {
             <div className="mb-32">
               <h3 className="text-xl font-semibold text-white mb-10">Data Visualizations</h3>
               <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <div className="bg-white/10 rounded-lg border border-white/20 p-8">
-                  <div className="flex items-center mb-6">
-                    <BarChart3 className="h-6 w-6 text-white mr-3" />
-                    <h4 className="text-lg font-medium text-white">Payment Trends</h4>
-                  </div>
-                  <div className="h-64 flex items-center justify-center bg-white/5 rounded-lg border-2 border-dashed border-white/20">
-                    <div className="text-center">
-                      <BarChart3 className="h-12 w-12 text-white/40 mx-auto mb-3" />
-                      <p className="text-white/60 text-sm">Interactive chart will be implemented</p>
-                      <p className="text-white/40 text-xs mt-1">Payment trends over time</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white/10 rounded-lg border border-white/20 p-8">
+                {/* Revenue Forecast Chart */}
+                <div className="border border-gray-700 rounded-lg p-8">
                   <div className="flex items-center mb-6">
                     <TrendingUp className="h-6 w-6 text-white mr-3" />
                     <h4 className="text-lg font-medium text-white">Revenue Forecast</h4>
                   </div>
-                  <div className="h-64 flex items-center justify-center bg-white/5 rounded-lg border-2 border-dashed border-white/20">
-                    <div className="text-center">
-                      <TrendingUp className="h-12 w-12 text-white/40 mx-auto mb-3" />
-                      <p className="text-white/60 text-sm">Interactive chart will be implemented</p>
-                      <p className="text-white/40 text-xs mt-1">Revenue predictions and trends</p>
-                    </div>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={revenueForecastData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="#ffffff60"
+                          style={{ fontSize: '12px' }}
+                        />
+                        <YAxis 
+                          stroke="#ffffff60"
+                          style={{ fontSize: '12px' }}
+                          tickFormatter={(value) => `₺${(value / 1000).toFixed(0)}k`}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#1f2937', 
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                          formatter={(value) => formatCurrency(value as number)}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="#10b981" 
+                          strokeWidth={2}
+                          dot={{ fill: '#10b981', r: 3 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Insights Section */}
+            {/* Revenue Breakdown */}
+            <div className="mb-32">
+              <h3 className="text-xl font-semibold text-white mb-10">Revenue Breakdown</h3>
+              <div className="border border-gray-700 rounded-lg p-8">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={revenueBreakdown}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="#ffffff60"
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        stroke="#ffffff60"
+                        style={{ fontSize: '12px' }}
+                        tickFormatter={(value) => `₺${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1f2937', 
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#fff'
+                        }}
+                        formatter={(value) => formatCurrency(value as number)}
+                      />
+                      <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Business Insights */}
             <div className="mb-32">
               <h3 className="text-xl font-semibold text-white mb-10">Business Insights</h3>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {insights.map((insight, index) => (
-                  <div
-                    key={index}
-                    className="bg-white/10 p-6 rounded-lg border border-white/20 hover:border-white/40 transition-all duration-300"
-                  >
-                    <div className="flex items-start">
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="w-3 h-3 rounded-full bg-white/60"></div>
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <div className="ml-4">
+                      <div className="flex items-center mb-2">
+                        <Activity className="h-5 w-5 text-white mr-2" />
+                        <h4 className="text-base font-medium text-white">Invoice Processing</h4>
                       </div>
-                      <div className="ml-4">
-                        <div className="flex items-center mb-2">
-                          <insight.icon className="h-5 w-5 text-white mr-2" />
-                          <h4 className="text-base font-medium text-white">{insight.title}</h4>
-                        </div>
-                        <p className="text-white/70 leading-relaxed">{insight.description}</p>
-                      </div>
+                      <p className="text-gray-400 leading-relaxed">
+                        System has processed {overview.invoices.total_invoices} invoice{overview.invoices.total_invoices !== 1 ? 's' : ''} 
+                        with {overview.invoices.pending_invoices} currently pending and {overview.invoices.overdue_invoices} overdue. 
+                        {overview.invoices.overdue_invoices > 0 
+                          ? ' Consider implementing automated follow-up systems for better collection rates.' 
+                          : ' All invoices are current.'}
+                      </p>
                     </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className={`w-3 h-3 rounded-full ${overview.invoices.overdue_invoices > 0 ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+                    </div>
+                    <div className="ml-4">
+                      <div className="flex items-center mb-2">
+                        <BarChart3 className="h-5 w-5 text-white mr-2" />
+                        <h4 className="text-base font-medium text-white">Overdue Management</h4>
+                      </div>
+                      <p className="text-gray-400 leading-relaxed">
+                        {overview.invoices.overdue_invoices} invoice{overview.invoices.overdue_invoices !== 1 ? 's are' : ' is'} currently overdue, 
+                        totaling {formatCurrency(overview.revenue.overdue_revenue)}. 
+                        {overview.invoices.overdue_invoices > 0 
+                          ? ' Consider implementing automated follow-up systems for better collection rates.' 
+                          : ' All invoices are current.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <div className="ml-4">
+                      <div className="flex items-center mb-2">
+                        <TrendingUp className="h-5 w-5 text-white mr-2" />
+                        <h4 className="text-base font-medium text-white">Revenue Growth</h4>
+                      </div>
+                      <p className="text-gray-400 leading-relaxed">
+                        Total revenue is {formatCurrency(overview.revenue.total_revenue)} with 
+                        {overview.revenue.revenue_change_percent !== undefined && overview.revenue.revenue_change_percent > 0 
+                          ? ` a ${formatPercent(overview.revenue.revenue_change_percent)} increase`
+                          : overview.revenue.revenue_change_percent !== undefined 
+                          ? ` a ${formatPercent(Math.abs(overview.revenue.revenue_change_percent))} decrease`
+                          : ' no comparison data available'} 
+                        {overview.revenue.revenue_change_percent !== undefined && overview.revenue.revenue_change_percent > 0 
+                          ? ', indicating strong business growth and market expansion opportunities.' 
+                          : '.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    </div>
+                    <div className="ml-4">
+                      <div className="flex items-center mb-2">
+                        <Database className="h-5 w-5 text-white mr-2" />
+                        <h4 className="text-base font-medium text-white">Data Processing</h4>
+                      </div>
+                      <p className="text-gray-400 leading-relaxed">
+                        Analytics engine processed {overview.invoices.total_invoices} invoice{overview.invoices.total_invoices !== 1 ? 's' : ''} 
+                        with {overview.invoices.pending_invoices} pending and {overview.invoices.overdue_invoices} overdue. 
+                        Total revenue tracked is {formatCurrency(overview.revenue.total_revenue)}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -178,48 +423,39 @@ export default function AnalyticsPage() {
             <div className="mb-32">
               <h3 className="text-xl font-semibold text-white mb-10">System Performance</h3>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="bg-white/10 p-6 rounded-lg border border-white/20 w-full overflow-hidden flex flex-col">
+                <div className="p-6 border border-gray-700 rounded-lg w-full flex flex-col">
                   <div className="flex items-center justify-between w-full mb-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white/70" title="Prediction Accuracy">Prediction Accuracy</p>
-                      <p className="text-2xl font-bold text-white">99.2%</p>
-                    </div>
-                    <Zap className="h-8 w-8 text-white flex-shrink-0 ml-4" />
-                  </div>
-                  <div className="mt-auto w-full">
-                    <div className="w-full bg-white/20 rounded-full h-2">
-                      <div className="bg-white h-2 rounded-full" style={{ width: "99.2%" }}></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white/10 p-6 rounded-lg border border-white/20 w-full overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between w-full mb-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white/70" title="Data Processing Speed">Data Processing Speed</p>
-                      <p className="text-2xl font-bold text-white">1,247/min</p>
+                      <p className="text-sm text-gray-400" title="Total Invoices">Total Invoices</p>
+                      <p className="text-2xl font-bold text-white">
+                        {overview.invoices.total_invoices}
+                      </p>
                     </div>
                     <Database className="h-8 w-8 text-white flex-shrink-0 ml-4" />
                   </div>
-                  <div className="mt-auto w-full">
-                    <div className="w-full bg-white/20 rounded-full h-2">
-                      <div className="bg-white h-2 rounded-full" style={{ width: "85%" }}></div>
-                    </div>
-                  </div>
                 </div>
 
-                <div className="bg-white/10 p-6 rounded-lg border border-white/20 w-full overflow-hidden flex flex-col">
+                <div className="p-6 border border-gray-700 rounded-lg w-full flex flex-col">
                   <div className="flex items-center justify-between w-full mb-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white/70" title="System Uptime">System Uptime</p>
-                      <p className="text-2xl font-bold text-white">99.9%</p>
+                      <p className="text-sm text-gray-400" title="Pending Invoices">Pending Invoices</p>
+                      <p className="text-2xl font-bold text-white">
+                        {overview.invoices.pending_invoices}
+                      </p>
                     </div>
                     <Activity className="h-8 w-8 text-white flex-shrink-0 ml-4" />
                   </div>
-                  <div className="mt-auto w-full">
-                    <div className="w-full bg-white/20 rounded-full h-2">
-                      <div className="bg-white h-2 rounded-full" style={{ width: "99.9%" }}></div>
+                </div>
+
+                <div className="p-6 border border-gray-700 rounded-lg w-full flex flex-col">
+                  <div className="flex items-center justify-between w-full mb-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-400" title="Overdue Invoices">Overdue Invoices</p>
+                      <p className="text-2xl font-bold text-white">
+                        {overview.invoices.overdue_invoices}
+                      </p>
                     </div>
+                    <Zap className="h-8 w-8 text-white flex-shrink-0 ml-4" />
                   </div>
                 </div>
               </div>

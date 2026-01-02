@@ -66,6 +66,9 @@ class Invoice(Base):
     ocr_confidence = Column(Float, nullable=True)
     extraction_status = Column(String(50), default="pending")  # pending, completed, failed
     
+    # Invoice status
+    status = Column(String(50), nullable=True)  # pending, overdue, paid, cancelled, void
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -97,32 +100,12 @@ class InvoiceItem(Base):
     invoice = relationship("Invoice", back_populates="items")
 
 
-class Payment(Base):
-    """Payment model"""
-    __tablename__ = "payments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
-    
-    amount = Column(Float, nullable=False)
-    payment_date = Column(Date, nullable=False, index=True)
-    payment_method = Column(String(50), nullable=True)  # e.g., "BANK_TRANSFER", "CHECK", "CASH"
-    reference_number = Column(String(100), nullable=True)
-    notes = Column(Text, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    invoice = relationship("Invoice")
-
-
 class Forecast(Base):
     """Forecast model for payment predictions"""
     __tablename__ = "forecasts"
 
     id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
     
     predicted_payment_date = Column(Date, nullable=False, index=True)
     confidence_score = Column(Float, nullable=True)  # 0.0 to 1.0
@@ -133,5 +116,5 @@ class Forecast(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    invoice = relationship("Invoice")
+    # Relationships - cascade delete when invoice is deleted
+    invoice = relationship("Invoice", backref="forecasts")

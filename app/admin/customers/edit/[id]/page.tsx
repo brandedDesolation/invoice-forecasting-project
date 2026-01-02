@@ -12,8 +12,7 @@ import { useToast, ToastContainer } from "../../../../../components/Toast";
 
 interface CustomerFormData {
   name: string;
-  taxNumber: string;
-  taxOffice: string;
+  taxId: string;
   email: string;
   phone: string;
   address: string;
@@ -29,8 +28,7 @@ export default function EditCustomerPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<CustomerFormData>({
     name: "",
-    taxNumber: "",
-    taxOffice: "",
+    taxId: "",
     email: "",
     phone: "",
     address: ""
@@ -50,8 +48,7 @@ export default function EditCustomerPage() {
         setCustomer(customerData);
         setFormData({
           name: customerData.name,
-          taxNumber: customerData.tax_number || "",
-          taxOffice: customerData.tax_office || "",
+          taxId: customerData.tax_id || "",
           email: customerData.email || "",
           phone: customerData.phone || "",
           address: customerData.address || ""
@@ -76,14 +73,9 @@ export default function EditCustomerPage() {
       newErrors.name = "Company name is required";
     }
 
-    if (!formData.taxNumber.trim()) {
-      newErrors.taxNumber = "Tax number (VKN) is required";
-    } else if (!/^\d{10}$/.test(formData.taxNumber)) {
-      newErrors.taxNumber = "Tax number must be 10 digits";
-    }
-
-    if (!formData.taxOffice.trim()) {
-      newErrors.taxOffice = "Tax office is required";
+    // Tax ID validation is optional
+    if (formData.taxId && !/^\d+$/.test(formData.taxId)) {
+      newErrors.taxId = "Tax ID should contain only numbers";
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -116,8 +108,7 @@ export default function EditCustomerPage() {
     try {
       const updateData: CustomerUpdate = {
         name: formData.name,
-        tax_number: formData.taxNumber,
-        tax_office: formData.taxOffice,
+        tax_id: formData.taxId,
         email: formData.email,
         phone: formData.phone,
         address: formData.address
@@ -262,44 +253,23 @@ export default function EditCustomerPage() {
                   )}
                 </div>
 
-                {/* Tax Number and Tax Office */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Tax Number (VKN) *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.taxNumber}
-                      onChange={(e) => handleInputChange("taxNumber", e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-md bg-gray-700/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-transparent ${
-                        errors.taxNumber ? "border-red-500" : "border-gray-600/30"
-                      }`}
-                      placeholder="1234567890"
-                      maxLength={10}
-                    />
-                    {errors.taxNumber && (
-                      <p className="mt-1 text-sm text-white">{errors.taxNumber}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">
-                      Tax Office *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.taxOffice}
-                      onChange={(e) => handleInputChange("taxOffice", e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-md bg-gray-700/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-transparent ${
-                        errors.taxOffice ? "border-red-500" : "border-gray-600/30"
-                      }`}
-                      placeholder="Enter tax office name"
-                    />
-                    {errors.taxOffice && (
-                      <p className="mt-1 text-sm text-white">{errors.taxOffice}</p>
-                    )}
-                  </div>
+                {/* Tax ID */}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Tax ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.taxId}
+                    onChange={(e) => handleInputChange("taxId", e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-md bg-gray-700/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-transparent ${
+                      errors.taxId ? "border-red-500" : "border-gray-600/30"
+                    }`}
+                    placeholder="Enter tax ID number"
+                  />
+                  {errors.taxId && (
+                    <p className="mt-1 text-sm text-white">{errors.taxId}</p>
+                  )}
                 </div>
 
                 {/* Email and Phone */}

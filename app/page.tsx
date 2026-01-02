@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Github, ExternalLink, FileText, Database, Code, Zap } from "lucide-react";
+import { Github, ExternalLink, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function Home() {
@@ -69,12 +69,11 @@ export default function Home() {
                 <ul className="group/list">
                   <li className="mb-32">
                     <div className="group relative grid gap-4 pb-1 transition-all sm:grid-cols-8 sm:gap-8 md:gap-4 lg:hover:!opacity-100 lg:group-hover/list:opacity-50">
-                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition motion-reduce:transition-none lg:-inset-x-6 lg:block lg:group-hover:bg-gray-800/50 lg:group-hover:shadow-[inset_0_1px_0_0_rgba(59,130,246,0.1)] lg:group-hover:drop-shadow-lg"></div>
+                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition motion-reduce:transition-none lg:-inset-x-6 lg:block"></div>
                       <div className="z-10 sm:col-span-6">
                         <h3 className="font-medium leading-snug text-gray-100">
                           <div className="inline-flex items-baseline font-medium leading-tight text-gray-100 hover:text-white focus-visible:text-white group/link text-base">
                             <span className="absolute -inset-x-4 -inset-y-2.5 hidden rounded md:-inset-x-6 md:-inset-y-4 lg:block"></span>
-                            <Database className="mr-2 h-4 w-4 inline" />
                             <span>Invoice Data Processing</span>
                           </div>
                         </h3>
@@ -83,17 +82,17 @@ export default function Home() {
                         </p>
                         <ul className="mt-2 flex flex-wrap" aria-label="Technologies used">
                           <li className="mr-1.5 mt-2">
-                            <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                            <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                               Pandas
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2">
-                            <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                            <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                               SQLAlchemy
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2">
-                            <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                            <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                               FastAPI
                             </div>
                           </li>
@@ -105,14 +104,13 @@ export default function Home() {
                   <li className="mb-32 ml-1">
                     <div className="group relative grid gap-4 pb-1 transition-all sm:grid-cols-8 sm:gap-8 md:gap-4 lg:hover:!opacity-100 lg:group-hover/list:opacity-50">
                       {/* Layered shadow system for depth */}
-                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition-all duration-500 motion-reduce:transition-none lg:-inset-x-6 lg:block lg:group-hover:bg-gradient-to-br lg:group-hover:from-gray-800/30 lg:group-hover:to-gray-900/40 lg:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] lg:group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] lg:group-hover:drop-shadow-2xl"></div>
-                      <div className="absolute -inset-x-3 -inset-y-3 z-0 hidden rounded-md transition-all duration-300 motion-reduce:transition-none lg:-inset-x-5 lg:block lg:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)] lg:group-hover:drop-shadow-lg"></div>
+                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition-all duration-500 motion-reduce:transition-none lg:-inset-x-6 lg:block"></div>
+                      <div className="absolute -inset-x-3 -inset-y-3 z-0 hidden rounded-md transition-all duration-300 motion-reduce:transition-none lg:-inset-x-5 lg:block"></div>
                       
                       <div className="z-10 sm:col-span-6">
                         <h3 className="font-medium leading-snug text-gray-100">
                           <div className="inline-flex items-baseline font-medium leading-tight text-gray-100 hover:text-white focus-visible:text-white group/link text-base transition-all duration-300">
                             <span className="absolute -inset-x-4 -inset-y-2.5 hidden rounded md:-inset-x-6 md:-inset-y-4 lg:block"></span>
-                            <Zap className="mr-2 h-4 w-4 inline transition-all duration-300 group-hover:scale-110 ml-0.5" />
                             <span className="font-semibold tracking-tight">AI-Powered Forecasting</span>
                           </div>
                         </h3>
@@ -121,17 +119,17 @@ export default function Home() {
                         </p>
                         <ul className="mt-3 flex flex-wrap" aria-label="Technologies used">
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               Machine Learning
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105 ml-0.5">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               Python
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               Time Series Analysis
                             </div>
                           </li>
@@ -143,14 +141,13 @@ export default function Home() {
                   <li className="mb-32 -ml-0.5">
                     <div className="group relative grid gap-4 pb-1 transition-all sm:grid-cols-8 sm:gap-8 md:gap-4 lg:hover:!opacity-100 lg:group-hover/list:opacity-50">
                       {/* Layered shadow system for depth */}
-                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition-all duration-500 motion-reduce:transition-none lg:-inset-x-6 lg:block lg:group-hover:bg-gradient-to-br lg:group-hover:from-gray-800/30 lg:group-hover:to-gray-900/40 lg:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] lg:group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] lg:group-hover:drop-shadow-2xl"></div>
-                      <div className="absolute -inset-x-3 -inset-y-3 z-0 hidden rounded-md transition-all duration-300 motion-reduce:transition-none lg:-inset-x-5 lg:block lg:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)] lg:group-hover:drop-shadow-lg"></div>
+                      <div className="absolute -inset-x-4 -inset-y-4 z-0 hidden rounded-md transition-all duration-500 motion-reduce:transition-none lg:-inset-x-6 lg:block"></div>
+                      <div className="absolute -inset-x-3 -inset-y-3 z-0 hidden rounded-md transition-all duration-300 motion-reduce:transition-none lg:-inset-x-5 lg:block"></div>
                       
                       <div className="z-10 sm:col-span-6">
                         <h3 className="font-medium leading-snug text-gray-100">
                           <div className="inline-flex items-baseline font-medium leading-tight text-gray-100 hover:text-white focus-visible:text-white group/link text-base transition-all duration-300">
                             <span className="absolute -inset-x-4 -inset-y-2.5 hidden rounded md:-inset-x-6 md:-inset-y-4 lg:block"></span>
-                            <Code className="mr-2 h-4 w-4 inline transition-all duration-300 group-hover:scale-110 -ml-0.5" />
                             <span className="font-semibold tracking-tight">RESTful API Architecture</span>
                           </div>
                         </h3>
@@ -159,17 +156,17 @@ export default function Home() {
                         </p>
                         <ul className="mt-4 flex flex-wrap" aria-label="Technologies used">
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               FastAPI
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105 ml-1">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               Pydantic
                             </div>
                           </li>
                           <li className="mr-1.5 mt-2 transition-all duration-300 hover:scale-105">
-                            <div className="flex items-center rounded-full bg-gradient-to-br from-gray-800/40 to-gray-900/60 px-3 py-1.5 text-xs font-medium leading-5 text-white border border-gray-600/30 shadow-lg hover:shadow-xl hover:border-gray-500/40 transition-all duration-300 backdrop-blur-sm">
+                            <div className="flex items-center px-3 py-1.5 text-xs font-medium leading-5 text-white transition-all duration-300">
                               OpenAPI
                             </div>
                           </li>
@@ -206,7 +203,7 @@ export default function Home() {
                   <ul className="flex flex-wrap gap-2">
                     {['Python', 'FastAPI', 'SQLAlchemy', 'Pydantic', 'Pandas', 'NumPy', 'Alembic'].map((tech) => (
                       <li key={tech}>
-                        <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                        <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                           {tech}
                         </div>
                       </li>
@@ -218,7 +215,7 @@ export default function Home() {
                   <ul className="flex flex-wrap gap-2">
                     {['Next.js', 'React', 'TypeScript', 'Tailwind CSS'].map((tech) => (
                       <li key={tech}>
-                        <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                        <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                           {tech}
                         </div>
                       </li>
@@ -230,7 +227,7 @@ export default function Home() {
                   <ul className="flex flex-wrap gap-2">
                     {['SQLite', 'PostgreSQL', 'Git', 'GitHub', 'Pytest'].map((tech) => (
                       <li key={tech}>
-                        <div className="flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-medium leading-5 text-white">
+                        <div className="flex items-center px-3 py-1 text-xs font-medium leading-5 text-white">
                           {tech}
                         </div>
                       </li>
@@ -252,17 +249,17 @@ export default function Home() {
                 <div className="mb-16">
                   <h3 className="mb-2 text-sm font-semibold text-gray-100">Key Endpoints:</h3>
                   <ul className="ml-4 list-disc space-y-1 text-gray-400">
-                    <li><code className="rounded bg-gray-800 px-2 py-0.5 text-sm text-white">/api/v1/invoices</code> - CRUD operations for invoices</li>
-                    <li><code className="rounded bg-gray-800 px-2 py-0.5 text-sm text-white">/api/v1/forecast</code> - AI-powered forecasting service</li>
-                    <li><code className="rounded bg-gray-800 px-2 py-0.5 text-sm text-white">/api/v1/upload</code> - File upload and data import</li>
-                    <li><code className="rounded bg-gray-800 px-2 py-0.5 text-sm text-white">/api/v1/analytics</code> - Financial insights and trends</li>
+                    <li><code className="px-2 py-0.5 text-sm text-white">/api/v1/invoices</code> - CRUD operations for invoices</li>
+                    <li><code className="px-2 py-0.5 text-sm text-white">/api/v1/forecast</code> - AI-powered forecasting service</li>
+                    <li><code className="px-2 py-0.5 text-sm text-white">/api/v1/upload</code> - File upload and data import</li>
+                    <li><code className="px-2 py-0.5 text-sm text-white">/api/v1/analytics</code> - Financial insights and trends</li>
                   </ul>
                 </div>
                     <div className="mt-12 flex gap-4">
                   <a
                     href="http://localhost:8000/docs"
                     target="_blank"
-                    className="inline-flex items-center rounded-md bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 transition-colors"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white hover:text-gray-300 transition-colors"
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     API Documentation
@@ -270,7 +267,7 @@ export default function Home() {
                   <a
                     href="https://github.com/brandedDesolation/invoice-forecasting-project"
                     target="_blank"
-                    className="inline-flex items-center rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-gray-100 hover:bg-gray-700 transition-colors"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white hover:text-gray-300 transition-colors"
                   >
                     <Github className="mr-2 h-4 w-4" />
                     View on GitHub

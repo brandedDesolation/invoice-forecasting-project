@@ -82,6 +82,16 @@ class InvoiceItemCreate(InvoiceItemBase):
     pass
 
 
+class InvoiceItemUpdate(BaseModel):
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    discount: Optional[float] = None
+    tax_rate: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total: Optional[float] = None
+
+
 class InvoiceItem(InvoiceItemBase):
     id: int
     invoice_id: int
@@ -107,6 +117,18 @@ class InvoiceCreate(InvoiceBase):
     items: List[InvoiceItemCreate] = []
 
 
+class InvoiceItemUpdateRequest(BaseModel):
+    """Request model for updating invoice items - can include id for updates or no id for creates"""
+    id: Optional[int] = None  # If provided, update existing item; if None, create new
+    description: str
+    quantity: Optional[float] = 1.0
+    unit_price: Optional[float] = None
+    discount: Optional[float] = 0.0
+    tax_rate: Optional[float] = 0.0
+    tax_amount: Optional[float] = 0.0
+    total: float = 0.0
+
+
 class InvoiceUpdate(BaseModel):
     invoice_number: Optional[str] = None
     issue_date: Optional[date] = None
@@ -116,6 +138,8 @@ class InvoiceUpdate(BaseModel):
     total: Optional[float] = None
     customer_id: Optional[int] = None
     supplier_id: Optional[int] = None
+    status: Optional[str] = None  # pending, overdue, paid, cancelled, void
+    items: Optional[List[InvoiceItemUpdateRequest]] = None  # If provided, replace all items
 
 
 class Invoice(InvoiceBase):
@@ -124,6 +148,7 @@ class Invoice(InvoiceBase):
     raw_text: Optional[str] = None
     ocr_confidence: Optional[float] = None
     extraction_status: str = "pending"
+    status: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     items: List[InvoiceItem] = []
@@ -152,38 +177,6 @@ class InvoiceUploadResponse(BaseModel):
     message: str
     invoice_id: Optional[int] = None
     extracted_data: Optional[ExtractedInvoiceData] = None
-
-
-# Payment Schemas
-class PaymentBase(BaseModel):
-    invoice_id: int
-    amount: float
-    payment_date: date
-    payment_method: Optional[str] = None
-    reference_number: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class PaymentCreate(PaymentBase):
-    pass
-
-
-class PaymentUpdate(BaseModel):
-    invoice_id: Optional[int] = None
-    amount: Optional[float] = None
-    payment_date: Optional[date] = None
-    payment_method: Optional[str] = None
-    reference_number: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class Payment(PaymentBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Forecast Schemas

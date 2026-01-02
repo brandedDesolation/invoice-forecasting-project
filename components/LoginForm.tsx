@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { authService, LoginCredentials } from "../lib/auth";
-import { Eye, EyeOff, Sparkles } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 
 export default function LoginForm() {
   const [credentials, setCredentials] = useState<LoginCredentials>({
@@ -70,17 +71,24 @@ export default function LoginForm() {
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="w-full max-w-md">
+          {/* Back to Home Link */}
+          <div className="mb-6">
+            <Link
+              href="/"
+              className="inline-flex items-center text-gray-400 hover:text-white transition-colors text-sm"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Home
+            </Link>
+          </div>
+
           {/* Neumorphic Login Container */}
-          <div className="bg-gray-800/30 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-gray-700/50 relative">
+          <div className="bg-gray-800/30 backdrop-blur-xl rounded-lg p-8 shadow-2xl border border-gray-700/50 relative">
             {/* Subtle glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-3xl"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent rounded-lg"></div>
             
-            {/* Header with icon */}
+            {/* Header */}
             <div className="text-center mb-8 relative z-10">
-              <div className="inline-flex items-center justify-center w-12 h-12 bg-white/10 rounded-2xl mb-4 backdrop-blur-sm">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-2xl font-bold text-white mb-2">Invoice Forecast</h1>
               <p className="text-gray-400 text-sm">Sign in to your account</p>
             </div>
 
@@ -93,7 +101,7 @@ export default function LoginForm() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 transition-all backdrop-blur-sm"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600/50 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 transition-all backdrop-blur-sm"
                   placeholder="Email"
                   value={credentials.email}
                   onChange={handleInputChange}
@@ -108,7 +116,7 @@ export default function LoginForm() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 transition-all backdrop-blur-sm pr-12"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600/50 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30 transition-all backdrop-blur-sm pr-12"
                   placeholder="Password"
                   value={credentials.password}
                   onChange={handleInputChange}
@@ -124,7 +132,7 @@ export default function LoginForm() {
 
               {/* Error Message */}
               {error && (
-                <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-3 backdrop-blur-sm">
+                <div className="bg-red-900/20 border border-red-500/30 rounded-md p-3 backdrop-blur-sm">
                   <p className="text-red-300 text-sm">{error}</p>
                 </div>
               )}
@@ -133,7 +141,7 @@ export default function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
               >
                 {loading ? (
                   <div className="flex items-center justify-center">

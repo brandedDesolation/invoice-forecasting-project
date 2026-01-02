@@ -8,7 +8,7 @@ from typing import List
 from datetime import date
 
 from ..database import get_db
-from ..schemas import Invoice, InvoiceCreate, InvoiceUpdate, InvoiceItemCreate
+from ..schemas import Invoice, InvoiceCreate, InvoiceUpdate, InvoiceItemCreate, InvoiceItemUpdateRequest
 from .. import models
 
 router = APIRouter()
@@ -88,17 +88,62 @@ async def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
 
 @router.put("/{invoice_id}", response_model=Invoice)
 async def update_invoice(invoice_id: int, invoice_update: InvoiceUpdate, db: Session = Depends(get_db)):
-    """Update invoice information"""
+    """Update invoice information and items"""
+    from sqlalchemy.orm import joinedload
+    
     db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if not db_invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    update_data = invoice_update.dict(exclude_unset=True)
+    # Update invoice fields (excluding items)
+    update_data = invoice_update.dict(exclude_unset=True, exclude={'items'})
     for field, value in update_data.items():
         setattr(db_invoice, field, value)
     
+    # Handle items update if provided
+    if invoice_update.items is not None:
+        # Get existing item IDs
+        existing_item_ids = {item.id for item in db_invoice.items}
+        
+        # Process items: update existing, create new, delete removed
+        new_item_ids = set()
+        for item_data in invoice_update.items:
+            if item_data.id and item_data.id in existing_item_ids:
+                # Update existing item
+                db_item = db.query(models.InvoiceItem).filter(
+                    models.InvoiceItem.id == item_data.id,
+                    models.InvoiceItem.invoice_id == invoice_id
+                ).first()
+                if db_item:
+                    item_dict = item_data.dict(exclude={'id'})
+                    for field, value in item_dict.items():
+                        setattr(db_item, field, value)
+                    new_item_ids.add(item_data.id)
+            else:
+                # Create new item
+                item_dict = item_data.dict(exclude={'id'})
+                item_dict['invoice_id'] = invoice_id
+                db_item = models.InvoiceItem(**item_dict)
+                db.add(db_item)
+        
+        # Delete items that were removed
+        items_to_delete = existing_item_ids - new_item_ids
+        if items_to_delete:
+            db.query(models.InvoiceItem).filter(
+                models.InvoiceItem.id.in_(items_to_delete),
+                models.InvoiceItem.invoice_id == invoice_id
+            ).delete(synchronize_session=False)
+    
     db.commit()
     db.refresh(db_invoice)
+    
+    # Reload with relationships
+    db_invoice = db.query(models.Invoice).options(
+        joinedload(models.Invoice.customer),
+        joinedload(models.Invoice.supplier),
+        joinedload(models.Invoice.items)
+    ).filter(models.Invoice.id == invoice_id).first()
+    
     return db_invoice
 
 

@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import ProtectedRoute from "../../../../../components/ProtectedRoute";
 import AdminLayout from "../../../../../components/AdminLayout";
-import { ArrowLeft, FileText, Calendar, DollarSign, Building, Mail, Phone, MapPin, Download, Printer, Upload, Eye, X, Image as ImageIcon } from "lucide-react";
-import { invoiceApi, Invoice, getErrorMessage } from "../../../../../lib/api";
+import { ConfirmDialog } from "../../../../../components/ConfirmDialog";
+import { useToast, ToastContainer } from "../../../../../components/Toast";
+import { ArrowLeft, FileText, Calendar, DollarSign, Building, Mail, Phone, MapPin, Download, Printer, Upload, Eye, X, Image as ImageIcon, Edit, Trash2 } from "lucide-react";
+import { invoiceApi, Invoice, getErrorMessage, API_BASE_URL } from "../../../../../lib/api";
 
 export default function ViewInvoicePage() {
   const router = useRouter();
@@ -14,16 +16,19 @@ export default function ViewInvoicePage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
+  const [apiError, setApiError] = useState<string>("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [hasImage, setHasImage] = useState(false);
   const [imageInfo, setImageInfo] = useState<{ filename: string; path: string } | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { toasts, removeToast, success, error } = useToast();
 
   useEffect(() => {
     const fetchInvoice = async () => {
       setLoading(true);
-      setError("");
+      setApiError("");
       try {
         const data = await invoiceApi.getInvoice(parseInt(invoiceId));
         setInvoice(data);
@@ -35,7 +40,7 @@ export default function ViewInvoicePage() {
         }
       } catch (err) {
         console.error("Error fetching invoice:", err);
-        setError(getErrorMessage(err));
+        setApiError(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -82,6 +87,22 @@ export default function ViewInvoicePage() {
     }
   };
 
+  const handleDeleteInvoice = async () => {
+    setDeleting(true);
+    try {
+      await invoiceApi.deleteInvoice(parseInt(invoiceId));
+      success("Invoice Deleted", "Invoice has been deleted successfully.");
+      // Redirect to invoices list after a short delay
+      setTimeout(() => {
+        router.push("/admin/invoices");
+      }, 1500);
+    } catch (err) {
+      console.error("Error deleting invoice:", err);
+      error("Delete Failed", getErrorMessage(err));
+      setDeleting(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', {
       style: 'currency',
@@ -103,14 +124,28 @@ export default function ViewInvoicePage() {
   };
 
   const getStatusBadge = (invoice: Invoice) => {
+    // Use manual status if set, otherwise calculate from due date
+    if (invoice.status) {
+      const statusColors: Record<string, string> = {
+        pending: "bg-gray-500 text-white",
+        overdue: "bg-black text-white",
+        paid: "bg-green-500 text-white",
+        cancelled: "bg-gray-600 text-white",
+        void: "bg-red-600 text-white",
+      };
+      const colorClass = statusColors[invoice.status.toLowerCase()] || "bg-gray-500 text-white";
+      return (
+        <span className={`px-3 py-1 text-sm font-medium rounded-full ${colorClass}`}>
+          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+        </span>
+      );
+    }
+
+    // Auto-calculate if no manual status
     const today = new Date();
     const dueDate = new Date(invoice.due_date || "");
-    const isOverdue = dueDate < today && invoice.total > 0;
-    const isPaid = invoice.total === 0;
+    const isOverdue = invoice.due_date && dueDate < today;
 
-    if (isPaid) {
-      return <span className="px-3 py-1 text-sm font-medium bg-white text-black rounded-full">Paid</span>;
-    }
     if (isOverdue) {
       return <span className="px-3 py-1 text-sm font-medium bg-black text-white rounded-full">Overdue</span>;
     }
@@ -129,14 +164,14 @@ export default function ViewInvoicePage() {
     );
   }
 
-  if (error) {
+  if (apiError) {
     return (
       <ProtectedRoute>
         <AdminLayout currentPage="invoices">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="text-white mb-4">Error loading invoice</div>
-              <div className="text-white/70 mb-4">{error}</div>
+              <div className="text-white/70 mb-4">{apiError}</div>
               <button
                 onClick={() => router.push("/admin/invoices")}
                 className="px-4 py-2 bg-white text-black rounded-md hover:bg-gray-200 transition-colors border border-gray-300"
@@ -165,6 +200,17 @@ export default function ViewInvoicePage() {
   return (
     <ProtectedRoute>
       <AdminLayout currentPage="invoices">
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+        <ConfirmDialog
+          isOpen={showDeleteDialog}
+          onClose={() => setShowDeleteDialog(false)}
+          onConfirm={handleDeleteInvoice}
+          title="Delete Invoice"
+          message={`Are you sure you want to delete invoice #${invoice.invoice_number}? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+        />
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
@@ -181,11 +227,25 @@ export default function ViewInvoicePage() {
                 <p className="text-white/70">Invoice #{invoice.invoice_number}</p>
               </div>
               <div className="flex space-x-3">
-                <button className="flex items-center px-4 py-2 bg-white text-black hover:bg-gray-200 font-medium rounded-md transition-colors border border-gray-300">
+                <button
+                  onClick={() => router.push(`/admin/invoices/edit/${invoiceId}`)}
+                  className="flex items-center px-4 py-2 text-white hover:text-gray-300 font-medium rounded-md transition-colors border border-gray-700 hover:border-gray-600"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Invoice
+                </button>
+                <button
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="px-4 py-2 text-red-400 hover:text-red-300 font-medium rounded-md transition-colors border border-red-700/50 hover:border-red-600"
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+                <button className="flex items-center px-4 py-2 text-white hover:text-gray-300 font-medium rounded-md transition-colors border border-gray-700 hover:border-gray-600">
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
                 </button>
-                <button className="flex items-center px-4 py-2 bg-white text-black hover:bg-gray-200 font-medium rounded-md transition-colors border border-gray-300">
+                <button className="flex items-center px-4 py-2 text-white hover:text-gray-300 font-medium rounded-md transition-colors border border-gray-700 hover:border-gray-600">
                   <Printer className="h-4 w-4 mr-2" />
                   Print
                 </button>
@@ -231,12 +291,30 @@ export default function ViewInvoicePage() {
               </div>
             </div>
             
-            {hasImage ? (
-              <div className="flex items-center space-x-4">
-                <ImageIcon className="h-8 w-8 text-white" />
-                <div>
-                  <p className="text-white font-medium">{imageInfo?.filename}</p>
-                  <p className="text-gray-400 text-sm">Image uploaded successfully</p>
+            {hasImage && invoice ? (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  <ImageIcon className="h-8 w-8 text-white" />
+                  <div>
+                    <p className="text-white font-medium">{imageInfo?.filename}</p>
+                    <p className="text-gray-400 text-sm">Image uploaded successfully</p>
+                  </div>
+                </div>
+                <div className="relative w-full max-w-md mx-auto">
+                  <img
+                    src={`${API_BASE_URL}/api/v1/upload/invoice-image/${invoiceId}/file`}
+                    alt="Invoice preview"
+                    className="w-full h-auto rounded-lg border border-gray-700 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setImageModalOpen(true)}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 rounded-lg opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                       onClick={() => setImageModalOpen(true)}>
+                    <Eye className="h-8 w-8 text-white" />
+                  </div>
                 </div>
               </div>
             ) : (
@@ -261,6 +339,35 @@ export default function ViewInvoicePage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-1">Status</label>
+                    <div className="flex items-center space-x-2">
+                      {getStatusBadge(invoice)}
+                      <select
+                        value={invoice.status || ""}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value;
+                          try {
+                            await invoiceApi.updateInvoice(parseInt(invoiceId), { status: newStatus || undefined });
+                            // Refresh invoice data
+                            const updatedInvoice = await invoiceApi.getInvoice(parseInt(invoiceId));
+                            setInvoice(updatedInvoice);
+                          } catch (err) {
+                            console.error("Error updating status:", err);
+                            alert(getErrorMessage(err));
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-transparent border border-gray-700 rounded text-white focus:outline-none focus:border-gray-600"
+                      >
+                        <option value="">Auto (from due date)</option>
+                        <option value="pending">Pending</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="paid">Paid</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="void">Void</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">OCR Status</label>
                     <p className="text-white">{invoice.extraction_status || "Standard"}</p>
                   </div>
                   <div>
@@ -290,7 +397,17 @@ export default function ViewInvoicePage() {
 
               {/* Customer Info */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4 border-b border-gray-600/30 pb-2">Customer Information</h3>
+                <div className="flex items-center justify-between mb-4 border-b border-gray-600/30 pb-2">
+                  <h3 className="text-lg font-semibold text-white">Customer Information</h3>
+                  {invoice.customer && (
+                    <button
+                      onClick={() => router.push(`/admin/customers/view/${invoice.customer_id}`)}
+                      className="text-sm text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                    >
+                      View Details →
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-1">Company Name</label>
@@ -427,25 +544,47 @@ export default function ViewInvoicePage() {
           )}
 
           {/* Image Modal */}
-          {imageModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
-              <div className="bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-auto">
+          {imageModalOpen && invoice && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
+              <div className="bg-black border border-gray-700 rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-white">Invoice Image</h3>
                   <button
                     onClick={() => setImageModalOpen(false)}
-                    className="text-white hover:text-gray-300"
+                    className="text-gray-400 hover:text-white transition-colors"
                   >
                     <X className="h-6 w-6" />
                   </button>
                 </div>
                 <div className="text-center">
-                  <p className="text-white mb-4">{imageInfo?.filename}</p>
-                  <div className="bg-gray-700 rounded-lg p-8">
-                    <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-400">Image preview would be displayed here</p>
-                    <p className="text-gray-500 text-sm mt-2">In production, this would show the actual uploaded image</p>
-                  </div>
+                  <p className="text-white mb-4">{imageInfo?.filename || "Invoice Image"}</p>
+                  {invoice.image_path ? (
+                    <div className="relative">
+                      <img
+                        src={`${API_BASE_URL}/api/v1/upload/invoice-image/${invoiceId}/file`}
+                        alt="Invoice"
+                        className="max-w-full h-auto rounded-lg border border-gray-700 mx-auto"
+                        onError={(e) => {
+                          // Fallback if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLElement;
+                          if (fallback) fallback.style.display = 'block';
+                        }}
+                      />
+                      <div className="hidden bg-gray-800 rounded-lg p-8 border border-gray-700">
+                        <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-400">Unable to load image</p>
+                        <p className="text-gray-500 text-sm mt-2">The image file may have been moved or deleted</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
+                      <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-400">No image available</p>
+                      <p className="text-gray-500 text-sm mt-2">This invoice does not have an associated image</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

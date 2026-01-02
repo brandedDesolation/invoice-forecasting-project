@@ -9,8 +9,8 @@ alembic>=1.14.0
 # psycopg2-binary  # Uncomment if using PostgreSQL
 
 # Data processing
-pandas>=2.2.3
-numpy>=2.2.1
+pandas>=2.0.0
+numpy>=1.24.0,<2.0  # Must be < 2.0 for OCR compatibility
 openpyxl>=3.1.5
 
 # Authentication
@@ -30,8 +30,9 @@ httpx>=0.28.0
 requests>=2.31.0
 
 # OCR and Image Processing
-easyocr>=1.7.0
+pytesseract>=0.3.10  # Primary OCR (requires Tesseract installed on system)
 Pillow>=10.0.0
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0  # Headless version for servers
 python-dateutil>=2.8.2
+# easyocr>=1.7.0  # Optional: uncomment if you want EasyOCR as fallback
 
