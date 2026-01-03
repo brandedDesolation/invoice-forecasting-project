@@ -1,6 +1,6 @@
 """
 Analytics endpoints for financial insights and metrics
-Uses invoice.status field instead of Payment table for paid calculations
+Uses invoice.status field for invoice state tracking (pending, paid, overdue, etc.)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -171,10 +171,27 @@ async def get_analytics_overview(
         })
     
     # Revenue forecast (next 30 days based on average)
+    # Use total_revenue if current_period_revenue is too small or zero
+    # Calculate average daily revenue from all invoices or current period
+    if current_period_revenue > 0:
+        avg_daily_revenue = current_period_revenue / days if days > 0 else 0
+    else:
+        # Fallback: use total revenue divided by days since first invoice or last 90 days
+        # Get the earliest invoice date
+        earliest_invoice = db.query(func.min(models.Invoice.issue_date)).scalar()
+        if earliest_invoice:
+            days_since_first = (today - earliest_invoice).days
+            if days_since_first > 0:
+                avg_daily_revenue = total_revenue / days_since_first
+            else:
+                avg_daily_revenue = total_revenue / 90 if total_revenue > 0 else 0
+        else:
+            avg_daily_revenue = total_revenue / 90 if total_revenue > 0 else 0
+    
     revenue_forecast = []
-    avg_daily_revenue = current_period_revenue / days if days > 0 else 0
     for i in range(30):
         forecast_date = today + timedelta(days=i)
+        # Forecast is cumulative: expected revenue by that date
         revenue_forecast.append({
             "date": forecast_date.isoformat(),
             "value": avg_daily_revenue * (i + 1),
@@ -348,7 +365,21 @@ async def get_revenue_forecast(
         models.Invoice.issue_date >= start_date
     ).scalar() or 0.0
     
-    avg_daily_revenue = period_revenue / days if days > 0 else 0
+    # If period revenue is too small, use total revenue from all invoices
+    if period_revenue > 0:
+        avg_daily_revenue = period_revenue / days if days > 0 else 0
+    else:
+        # Fallback: use total revenue divided by days since first invoice
+        total_revenue = db.query(func.sum(models.Invoice.total)).scalar() or 0.0
+        earliest_invoice = db.query(func.min(models.Invoice.issue_date)).scalar()
+        if earliest_invoice:
+            days_since_first = (today - earliest_invoice).days
+            if days_since_first > 0:
+                avg_daily_revenue = total_revenue / days_since_first
+            else:
+                avg_daily_revenue = total_revenue / 90 if total_revenue > 0 else 0
+        else:
+            avg_daily_revenue = total_revenue / 90 if total_revenue > 0 else 0
     
     forecast = []
     for i in range(30):

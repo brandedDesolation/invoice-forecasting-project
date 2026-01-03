@@ -5,9 +5,6 @@ import ProtectedRoute from "../../../components/ProtectedRoute";
 import AdminLayout from "../../../components/AdminLayout";
 import { 
   TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Calendar, 
   BarChart3, 
   Activity, 
   Database, 
@@ -17,22 +14,15 @@ import {
 import { 
   analyticsApi, 
   AnalyticsOverview, 
-  RevenueMetrics, 
-  InvoiceMetrics, 
   getErrorMessage 
 } from "../../../lib/api";
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer
 } from "recharts";
 
@@ -122,13 +112,6 @@ export default function AnalyticsPage() {
   if (!overview) {
     return null;
   }
-
-  // Prepare chart data
-  const revenueForecastData = overview.revenue_forecast.map(forecast => ({
-    date: new Date(forecast.date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
-    value: forecast.value,
-    fullDate: forecast.date
-  }));
 
   // Revenue breakdown for pie/bar chart
   const revenueBreakdown = [
@@ -246,58 +229,11 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Charts Section */}
-            <div className="mb-32">
-              <h3 className="text-xl font-semibold text-white mb-10">Data Visualizations</h3>
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                {/* Revenue Forecast Chart */}
-                <div className="border border-gray-700 rounded-lg p-8">
-                  <div className="flex items-center mb-6">
-                    <TrendingUp className="h-6 w-6 text-white mr-3" />
-                    <h4 className="text-lg font-medium text-white">Revenue Forecast</h4>
-                  </div>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={revenueForecastData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#ffffff60"
-                          style={{ fontSize: '12px' }}
-                        />
-                        <YAxis 
-                          stroke="#ffffff60"
-                          style={{ fontSize: '12px' }}
-                          tickFormatter={(value) => `₺${(value / 1000).toFixed(0)}k`}
-                        />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: '#1f2937', 
-                            border: '1px solid #374151',
-                            borderRadius: '8px',
-                            color: '#fff'
-                          }}
-                          formatter={(value) => formatCurrency(value as number)}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="#10b981" 
-                          strokeWidth={2}
-                          dot={{ fill: '#10b981', r: 3 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Revenue Breakdown */}
             <div className="mb-32">
-              <h3 className="text-xl font-semibold text-white mb-10">Revenue Breakdown</h3>
-              <div className="border border-gray-700 rounded-lg p-8">
-                <div className="h-64">
+              <h3 className="text-xl font-semibold text-white mb-6">Revenue Breakdown</h3>
+              <div className="border border-gray-700 rounded-lg p-6 max-w-2xl">
+                <div className="h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={revenueBreakdown}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />

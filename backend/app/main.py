@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from .database import create_tables
-from .routers import invoices, customers, suppliers, forecasts, upload, analytics
+from .routers import invoices, customers, forecasts, upload, analytics
 
 # Create FastAPI app
 app = FastAPI(
@@ -31,7 +31,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(customers.router, prefix="/api/v1/customers", tags=["customers"])
-app.include_router(suppliers.router, prefix="/api/v1/suppliers", tags=["suppliers"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["invoices"])
 app.include_router(forecasts.router, prefix="/api/v1/forecasts", tags=["forecasts"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])

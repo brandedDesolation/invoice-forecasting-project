@@ -127,15 +127,15 @@ export default function ViewInvoicePage() {
     // Use manual status if set, otherwise calculate from due date
     if (invoice.status) {
       const statusColors: Record<string, string> = {
-        pending: "bg-gray-500 text-white",
-        overdue: "bg-black text-white",
-        paid: "bg-green-500 text-white",
-        cancelled: "bg-gray-600 text-white",
-        void: "bg-red-600 text-white",
+        pending: "text-yellow-400",
+        overdue: "text-red-400",
+        paid: "text-green-400",
+        cancelled: "text-gray-400",
+        void: "text-red-500",
       };
-      const colorClass = statusColors[invoice.status.toLowerCase()] || "bg-gray-500 text-white";
+      const colorClass = statusColors[invoice.status.toLowerCase()] || "text-gray-400";
       return (
-        <span className={`px-3 py-1 text-sm font-medium rounded-full ${colorClass}`}>
+        <span className={`px-3 py-1 text-sm font-medium ${colorClass}`}>
           {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
         </span>
       );
@@ -147,9 +147,9 @@ export default function ViewInvoicePage() {
     const isOverdue = invoice.due_date && dueDate < today;
 
     if (isOverdue) {
-      return <span className="px-3 py-1 text-sm font-medium bg-black text-white rounded-full">Overdue</span>;
+      return <span className="px-3 py-1 text-sm font-medium text-red-400">Overdue</span>;
     }
-    return <span className="px-3 py-1 text-sm font-medium bg-gray-500 text-white rounded-full">Pending</span>;
+    return <span className="px-3 py-1 text-sm font-medium text-yellow-400">Pending</span>;
   };
 
   if (loading) {
@@ -355,7 +355,7 @@ export default function ViewInvoicePage() {
                             alert(getErrorMessage(err));
                           }
                         }}
-                        className="px-2 py-1 text-xs bg-transparent border border-gray-700 rounded text-white focus:outline-none focus:border-gray-600"
+                        className="px-2 py-1 text-xs bg-transparent text-white focus:outline-none"
                       >
                         <option value="">Auto (from due date)</option>
                         <option value="pending">Pending</option>
