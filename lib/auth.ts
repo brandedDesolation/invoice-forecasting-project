@@ -1,14 +1,20 @@
 /**
- * Mock Authentication System
- * Simple authentication for development
+ * Backend-backed authentication utilities.
  */
 
+export const AUTH_TOKEN_KEY = "invoice_forecast_token";
+export const AUTH_USER_KEY = "invoice_forecast_user";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export interface User {
-  id: string;
+  id: number;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: "admin" | "finance_manager" | "accountant" | "auditor" | "user";
   company?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LoginCredentials {
@@ -16,36 +22,17 @@ export interface LoginCredentials {
   password: string;
 }
 
-// Mock users database
-const MOCK_USERS: User[] = [
-  {
-    id: '1',
-    email: 'admin@invoiceforecast.com',
-    name: 'Admin User',
-    role: 'admin',
-    company: 'Invoice Forecast Corp'
-  },
-  {
-    id: '2',
-    email: 'user@company.com',
-    name: 'John Doe',
-    role: 'user',
-    company: 'ABC Company'
-  },
-  {
-    id: '3',
-    email: 'demo@demo.com',
-    name: 'Demo User',
-    role: 'user',
-    company: 'Demo Corp'
-  }
-];
+interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
 
-// Simple password validation (in real app, this would be hashed)
-const MOCK_PASSWORDS: Record<string, string> = {
-  'admin@invoiceforecast.com': 'admin123',
-  'user@company.com': 'user123',
-  'demo@demo.com': 'demo123'
+const persistSession = (data: LoginResponse) => {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
+  }
 };
 
 export class AuthService {
@@ -53,9 +40,8 @@ export class AuthService {
   private currentUser: User | null = null;
 
   private constructor() {
-    // Check if user is already logged in (from localStorage)
     if (typeof window !== 'undefined') {
-      const savedUser = localStorage.getItem('invoice_forecast_user');
+      const savedUser = localStorage.getItem(AUTH_USER_KEY);
       if (savedUser) {
         this.currentUser = JSON.parse(savedUser);
       }
@@ -70,43 +56,79 @@ export class AuthService {
   }
 
   async login(credentials: LoginCredentials): Promise<{ success: boolean; user?: User; error?: string }> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
+      });
 
-    const user = MOCK_USERS.find(u => u.email === credentials.email);
-    const correctPassword = MOCK_PASSWORDS[credentials.email];
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Login failed" }));
+        return { success: false, error: errorData.detail || "Invalid email or password" };
+      }
 
-    if (!user || !correctPassword) {
-      return { success: false, error: 'Invalid email or password' };
+      const data: LoginResponse = await response.json();
+      this.currentUser = data.user;
+      persistSession(data);
+
+      return { success: true, user: data.user };
+    } catch (error) {
+      return { success: false, error: "Unable to reach the authentication service" };
     }
+  }
 
-    if (correctPassword !== credentials.password) {
-      return { success: false, error: 'Invalid email or password' };
+  async loginWithGoogle(idToken: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/google`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id_token: idToken }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Google sign-in failed" }));
+        return { success: false, error: errorData.detail || "Google sign-in failed" };
+      }
+
+      const data: LoginResponse = await response.json();
+      this.currentUser = data.user;
+      persistSession(data);
+      return { success: true, user: data.user };
+    } catch (_error) {
+      return { success: false, error: "Unable to reach the Google SSO demo service" };
     }
-
-    this.currentUser = user;
-    
-    // Save to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('invoice_forecast_user', JSON.stringify(user));
-    }
-
-    return { success: true, user };
   }
 
   async logout(): Promise<void> {
     this.currentUser = null;
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('invoice_forecast_user');
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
     }
   }
 
+  getToken(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  }
+
   getCurrentUser(): User | null {
+    if (typeof window !== "undefined" && !this.currentUser) {
+      const savedUser = localStorage.getItem(AUTH_USER_KEY);
+      if (savedUser) {
+        this.currentUser = JSON.parse(savedUser);
+      }
+    }
     return this.currentUser;
   }
 
   isAuthenticated(): boolean {
-    return this.currentUser !== null;
+    return this.getToken() !== null;
   }
 
   hasRole(role: 'admin' | 'user'): boolean {
@@ -117,22 +139,41 @@ export class AuthService {
     return this.hasRole('admin');
   }
 
-  async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-    if (!this.currentUser) {
-      return { success: false, error: 'Not authenticated' };
+  async refreshCurrentUser(): Promise<User | null> {
+    const token = this.getToken();
+    if (!token) {
+      this.currentUser = null;
+      return null;
     }
 
-    const currentPassword = MOCK_PASSWORDS[this.currentUser.email];
-    if (currentPassword !== oldPassword) {
-      return { success: false, error: 'Current password is incorrect' };
-    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    // In a real app, you would hash the new password and update the database
-    MOCK_PASSWORDS[this.currentUser.email] = newPassword;
-    
-    return { success: true };
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          await this.logout();
+          return null;
+        }
+
+        // Keep the existing session during transient backend errors/reloads.
+        return this.getCurrentUser();
+      }
+
+      const user: User = await response.json();
+      this.currentUser = user;
+      if (typeof window !== "undefined") {
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+      }
+      return user;
+    } catch (_error) {
+      // Do not drop the session on temporary network/backend restart issues.
+      return this.getCurrentUser();
+    }
   }
 }
 
-// Export singleton instance
 export const authService = AuthService.getInstance();

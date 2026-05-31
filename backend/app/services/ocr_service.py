@@ -7,7 +7,7 @@ import re
 import os
 from datetime import datetime
 from dateutil import parser as date_parser
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from PIL import Image
 
 # Try to import OCR libraries
@@ -36,6 +36,20 @@ try:
     CV2_AVAILABLE = True
 except ImportError:
     print("⚠️ cv2 not available, using PIL for image processing")
+
+PDF_TEXT_AVAILABLE = False
+PDF_RENDER_AVAILABLE = False
+try:
+    from pypdf import PdfReader
+    PDF_TEXT_AVAILABLE = True
+except ImportError:
+    print("⚠️ pypdf not available, direct PDF text extraction disabled")
+
+try:
+    import pypdfium2 as pdfium
+    PDF_RENDER_AVAILABLE = True
+except ImportError:
+    print("⚠️ pypdfium2 not available, PDF rendering disabled")
 
 
 class InvoiceOCRService:
@@ -86,16 +100,34 @@ class InvoiceOCRService:
             print("❌ No OCR backend available!")
             raise RuntimeError("No OCR backend available. Please install pytesseract or easyocr.")
     
-    def preprocess_image(self, image_path: str):
+    def _preprocess_pil_image(self, image: Image.Image):
+        """Preprocess an in-memory image for OCR"""
+        if CV2_AVAILABLE:
+            import numpy as np
+
+            img_array = np.array(image.convert("RGB"))
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+            denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+            _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            return thresh
+
+        return image.convert("L")
+
+    def preprocess_image(self, image_source: Union[str, Image.Image]):
         """
         Preprocess image for better OCR results
         
         Args:
-            image_path: Path to the image file
+            image_source: Path to the image file or a PIL image
             
         Returns:
             Preprocessed image (PIL Image or numpy array depending on backend)
         """
+        if isinstance(image_source, Image.Image):
+            return self._preprocess_pil_image(image_source)
+
+        image_path = image_source
+
         if CV2_AVAILABLE:
             # Use OpenCV for preprocessing
             img = cv2.imread(image_path)
@@ -118,6 +150,72 @@ class InvoiceOCRService:
             # Convert to grayscale
             img = img.convert('L')
             return img
+
+    def _extract_text_from_pdf_text_layer(self, pdf_path: str) -> Tuple[str, float, List[str]]:
+        """Extract embedded text from a digital PDF when available"""
+        if not PDF_TEXT_AVAILABLE:
+            return "", 0.0, []
+
+        try:
+            reader = PdfReader(pdf_path)
+            page_texts: List[str] = []
+            for page in reader.pages[:3]:
+                text = page.extract_text() or ""
+                if text.strip():
+                    page_texts.append(text)
+
+            full_text = "\n".join(page_texts).strip()
+            lines = [line.strip() for line in full_text.splitlines() if line.strip()]
+            if len(full_text) < 20:
+                return "", 0.0, []
+
+            return full_text, 0.95, lines
+        except Exception as e:
+            print(f"PDF text extraction failed: {e}")
+            return "", 0.0, []
+
+    def _render_pdf_pages(self, pdf_path: str, max_pages: int = 3) -> List[Image.Image]:
+        """Render first pages of PDF to images for OCR"""
+        if not PDF_RENDER_AVAILABLE:
+            raise RuntimeError("PDF rendering is not available. Please install pypdfium2.")
+
+        images: List[Image.Image] = []
+        pdf = pdfium.PdfDocument(pdf_path)
+        try:
+            page_count = min(len(pdf), max_pages)
+            for page_index in range(page_count):
+                page = pdf[page_index]
+                bitmap = page.render(scale=2.0)
+                images.append(bitmap.to_pil())
+                page.close()
+        finally:
+            pdf.close()
+
+        return images
+
+    def _extract_text_from_pdf_render(self, pdf_path: str) -> Tuple[str, float, List[str]]:
+        """Fallback OCR path for scanned PDFs"""
+        page_texts: List[str] = []
+        page_lines: List[str] = []
+        confidences: List[float] = []
+
+        for rendered_page in self._render_pdf_pages(pdf_path):
+            processed_img = self.preprocess_image(rendered_page)
+            if self.backend == "tesseract":
+                page_text, confidence, lines = self._extract_with_tesseract(processed_img)
+            elif self.backend == "easyocr":
+                page_text, confidence, lines = self._extract_with_easyocr(processed_img)
+            else:
+                raise RuntimeError("No OCR backend available")
+
+            if page_text.strip():
+                page_texts.append(page_text.strip())
+                page_lines.extend(lines)
+                confidences.append(confidence)
+
+        full_text = "\n".join(page_texts).strip()
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        return full_text, avg_confidence, page_lines
     
     def extract_text(self, image_path: str) -> Tuple[str, float, List[str]]:
         """
@@ -129,6 +227,12 @@ class InvoiceOCRService:
         Returns:
             Tuple of (full_text, average_confidence, lines)
         """
+        if image_path.lower().endswith(".pdf"):
+            full_text, confidence, lines = self._extract_text_from_pdf_text_layer(image_path)
+            if full_text:
+                return full_text, confidence, lines
+            return self._extract_text_from_pdf_render(image_path)
+
         processed_img = self.preprocess_image(image_path)
         
         if self.backend == "tesseract":
@@ -305,75 +409,112 @@ class InvoiceOCRService:
         except (ValueError, TypeError):
             return None
     
-    def extract_amounts(self, text: str) -> Dict[str, float]:
-        """Extract monetary amounts from text - optimized for Turkish invoices"""
+    def _extract_amount_from_patterns(
+        self,
+        text: str,
+        lines: List[str],
+        patterns: List[str],
+        prefer_last: bool = True,
+    ) -> Optional[float]:
+        """Extract an amount by scanning lines first, then the whole text"""
+        non_empty_lines = [" ".join(line.split()) for line in lines if line and line.strip()]
+
+        search_scopes = [
+            non_empty_lines[-20:],  # bottom summary table is usually near the end
+            non_empty_lines,
+        ]
+
+        for scope in search_scopes:
+            candidates: List[float] = []
+            for line in scope:
+                for pattern in patterns:
+                    for match in re.finditer(pattern, line, re.IGNORECASE):
+                        parsed = self.parse_turkish_number(match.group(1).strip())
+                        if parsed is not None and parsed > 0:
+                            candidates.append(parsed)
+
+            if candidates:
+                return candidates[-1] if prefer_last else candidates[0]
+
+        text_candidates: List[float] = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                parsed = self.parse_turkish_number(match.group(1).strip())
+                if parsed is not None and parsed > 0:
+                    text_candidates.append(parsed)
+
+        if text_candidates:
+            return text_candidates[-1] if prefer_last else text_candidates[0]
+
+        return None
+
+    def extract_amounts(self, text: str, lines: List[str]) -> Dict[str, float]:
+        """Extract monetary amounts with strong preference for invoice summary totals"""
         amounts = {
             "subtotal": 0.0,
             "tax": 0.0,
             "total": 0.0
         }
-        
-        # More specific patterns for Turkish invoices
-        # Pattern captures the amount that appears NEAR the keyword (before or after)
-        patterns = {
-            "total": [
-                # Amount BEFORE keyword (common in tables)
-                r'([\d.,]+)\s*[₺TL]*\s*(?:TOPLAM|Toplam|ÖDENECEK|Ödenecek)',
-                # Amount AFTER keyword
-                r'(?:GENEL\s*)?TOPLAM\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'ÖDENECEK\s*TUTAR\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Ödenecek\s*Tutar\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Vergiler\s*Dahil\s*Toplam\s*Tutar\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'NET\s*TOPLAM\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                # English fallbacks
-                r'Grand\s*Total\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
-                r'Total\s+Amount\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
-            ],
-            "subtotal": [
-                # Amount with TL/₺ suffix (common pattern)
-                r'([\d.,]+)\s*(?:TL|TY|₺)\s*(?:Mal\s*Hizmet|KDV\s*Matrah)',
-                r'Mal\s*Hizmet\s*Toplam\s*Tutarı?\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'KDV\s*Matrahı\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Matrah\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Ara\s*Toplam\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Subtotal\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
-            ],
-            "tax": [
-                r'KDV\s*Tutarı?\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Hesaplanan\s*KDV\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Vergi\s*[:\s|]*[₺TL\s]*([\d.,]+)',
-                r'Tax\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
-                r'VAT\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
-            ]
-        }
-        
-        for amount_type, pattern_list in patterns.items():
-            for pattern in pattern_list:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    amount_str = match.group(1).strip()
-                    parsed = self.parse_turkish_number(amount_str)
-                    if parsed is not None and parsed > 0:
-                        amounts[amount_type] = parsed
-                        break
-        
-        # If we have subtotal and tax but no total, calculate it
-        if amounts["total"] == 0.0 and amounts["subtotal"] > 0:
+
+        total_patterns = [
+            r'Ödenecek\s*Tutar\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Vergiler\s*Dahil\s*Toplam\s*Tutar\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'(?:Genel|Net)\s*Toplam\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Grand\s*Total\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
+            r'Total\s+Amount\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
+            r'([\d.,]+)\s*(?:TL|TY|₺)?\s*(?:Ödenecek\s*Tutar|Vergiler\s*Dahil\s*Toplam\s*Tutar|(?:Genel|Net)\s*Toplam)',
+        ]
+        subtotal_patterns = [
+            r'Mal\s*Hizmet\s*Toplam\s*Tutarı?\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'KDV\s*Matrahı\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Matrah\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Ara\s*Toplam\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Subtotal\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
+            r'([\d.,]+)\s*(?:TL|TY|₺)?\s*(?:Mal\s*Hizmet\s*Toplam\s*Tutarı?|KDV\s*Matrahı|Ara\s*Toplam)',
+        ]
+        tax_patterns = [
+            r'Hesaplanan\s*KDV(?:\s*\(%?\d+[.,]?\d*\))?\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'KDV\s*Tutarı?\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Vergi\s*[:\s|]*[₺TL\s]*([\d.,]+)',
+            r'Tax\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
+            r'VAT\s*[:\s|]*[\$€₺TL\s]*([\d.,]+)',
+            r'([\d.,]+)\s*(?:TL|TY|₺)?\s*(?:Hesaplanan\s*KDV|KDV\s*Tutarı?|Vergi|VAT)',
+        ]
+
+        total_value = self._extract_amount_from_patterns(text, lines, total_patterns)
+        subtotal_value = self._extract_amount_from_patterns(text, lines, subtotal_patterns)
+        tax_value = self._extract_amount_from_patterns(text, lines, tax_patterns)
+
+        if total_value is not None:
+            amounts["total"] = total_value
+        if subtotal_value is not None:
+            amounts["subtotal"] = subtotal_value
+        if tax_value is not None:
+            amounts["tax"] = tax_value
+
+        # Keep totals internally consistent when OCR gets one field right and misses another.
+        if amounts["total"] <= 0.0 and amounts["subtotal"] > 0.0:
             amounts["total"] = amounts["subtotal"] + amounts["tax"]
-        
-        # Try to find the last TL amount in the text as a fallback for total
-        # This is common at the end of invoices
+
+        if amounts["total"] > 0.0 and amounts["subtotal"] > 0.0 and amounts["tax"] > 0.0:
+            expected_total = amounts["subtotal"] + amounts["tax"]
+            if abs(amounts["total"] - expected_total) > 0.01:
+                # Prefer explicit "Ödenecek Tutar", but if OCR grabbed a line item / subtotal as total,
+                # snap back to the summary arithmetic.
+                if amounts["total"] <= amounts["subtotal"]:
+                    amounts["total"] = expected_total
+
+        # Final fallback: the last monetary value near the end of the document is often the payable total.
         if amounts["total"] == 0.0:
-            # Find all amounts with TL suffix at the end of text
-            tl_amounts = re.findall(r'([\d.,]+)\s*(?:TL|TY|₺)', text, re.IGNORECASE)
+            tail_text = "\n".join([" ".join(line.split()) for line in lines[-20:] if line.strip()])
+            tl_amounts = re.findall(r'([\d.,]+)\s*(?:TL|TY|₺)', tail_text or text, re.IGNORECASE)
             if tl_amounts:
-                # Try the LAST TL amount (usually the total at bottom of invoice)
                 for amount_str in reversed(tl_amounts):
                     parsed = self.parse_turkish_number(amount_str)
-                    if parsed is not None and parsed > 50:  # Reasonable minimum
+                    if parsed is not None and parsed > 50:
                         amounts["total"] = parsed
                         break
-        
+
         return amounts
     
     def extract_supplier_info(self, text: str, lines: List[str]) -> Dict[str, Optional[str]]:
@@ -507,9 +648,102 @@ class InvoiceOCRService:
         return customer
     
     def extract_invoice_items(self, text: str, lines: List[str]) -> List[Dict]:
-        """Extract line items from invoice"""
-        # Simplified - returns empty list for now
-        return []
+        """Extract invoice line items from table-like OCR output"""
+        normalized_lines = [" ".join(line.split()) for line in lines if line and line.strip()]
+        if not normalized_lines:
+            return []
+
+        start_idx = 0
+        end_idx = len(normalized_lines)
+
+        for index, line in enumerate(normalized_lines):
+            if re.search(r'(mal\s*hizmet|açıklama|miktar|birim\s*fiyat|kdv\s*tutarı)', line, re.IGNORECASE):
+                start_idx = index + 1
+                break
+
+        for index in range(start_idx, len(normalized_lines)):
+            if re.search(r'(mal\s*hizmet\s*toplam|toplam\s*iskonto|kdv\s*matrah|ödenecek\s*tutar|vergiler\s*dahil)', normalized_lines[index], re.IGNORECASE):
+                end_idx = index
+                break
+
+        table_lines = normalized_lines[start_idx:end_idx]
+        items: List[Dict] = []
+        description_buffer: List[str] = []
+
+        quantity_pattern = r'(\d+(?:[.,]\d+)?)\s*(?:Adet|ADET|Kg|KG|Paket|Koli|Saat|Gün|Ay|Yıl|Mt|M2|M3|Lt|Litre|Piece|PCS|PC)\b'
+        amount_token_pattern = r'(\d[\d.,]*)\s*(?:TL|TY|₺)?'
+        percent_pattern = r'%\s*(\d+(?:[.,]\d+)?)'
+
+        def flush_item(description_parts: List[str], numeric_line: str) -> Optional[Dict]:
+            qty_match = re.search(quantity_pattern, numeric_line, re.IGNORECASE)
+            if not qty_match:
+                return None
+
+            quantity = self.parse_turkish_number(qty_match.group(1)) or 1.0
+            trailing_segment = numeric_line[qty_match.end():]
+            amount_tokens = re.findall(amount_token_pattern, trailing_segment, re.IGNORECASE)
+            parsed_amounts = [self.parse_turkish_number(token) for token in amount_tokens]
+            parsed_amounts = [value for value in parsed_amounts if value is not None and value > 0]
+
+            if not parsed_amounts:
+                return None
+
+            unit_price = parsed_amounts[0] if len(parsed_amounts) >= 1 else None
+            tax_amount = parsed_amounts[-2] if len(parsed_amounts) >= 2 else 0.0
+            total = parsed_amounts[-1]
+
+            tax_rate_match = re.search(percent_pattern, trailing_segment)
+            tax_rate = self.parse_turkish_number(tax_rate_match.group(1)) if tax_rate_match else 0.0
+
+            description = " ".join(part.strip(" -") for part in description_parts if part.strip(" -")).strip()
+            if not description:
+                description = numeric_line[:qty_match.start()].strip(" -")
+            if not description:
+                return None
+
+            return {
+                "description": description,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "discount": 0.0,
+                "tax_rate": tax_rate or 0.0,
+                "tax_amount": tax_amount or 0.0,
+                "total": total,
+            }
+
+        for line in table_lines:
+            if re.fullmatch(r'\d+', line):
+                continue
+            if re.search(r'(sıra\s*no|mal\s*hizmet|açıklama|miktar|birim\s*fiyat|iskonto|diğer\s*vergiler)', line, re.IGNORECASE):
+                continue
+
+            qty_match = re.search(quantity_pattern, line, re.IGNORECASE)
+            if qty_match:
+                item = flush_item(description_buffer, line)
+                if item:
+                    items.append(item)
+                description_buffer = []
+                continue
+
+            if re.search(r'[A-Za-zÇĞIİÖŞÜçğıiöşü]', line):
+                description_buffer.append(line)
+
+            if len(items) >= 20:
+                break
+
+        if not items:
+            # Fallback for single-line rows where description and values are in the same OCR line.
+            for line in table_lines:
+                qty_match = re.search(quantity_pattern, line, re.IGNORECASE)
+                if not qty_match:
+                    continue
+                item = flush_item([], line)
+                if item:
+                    items.append(item)
+                if len(items) >= 20:
+                    break
+
+        return items
     
     def process_invoice(self, image_path: str) -> Dict:
         """
@@ -528,7 +762,7 @@ class InvoiceOCRService:
         invoice_number = self.extract_invoice_number(full_text, lines)
         issue_date = self.extract_date(full_text, "issue")
         due_date = self.extract_date(full_text, "due")
-        amounts = self.extract_amounts(full_text)
+        amounts = self.extract_amounts(full_text, lines)
         supplier = self.extract_supplier_info(full_text, lines)
         customer = self.extract_customer_info(full_text)
         items = self.extract_invoice_items(full_text, lines)
@@ -543,6 +777,7 @@ class InvoiceOCRService:
             "items": items,
             "raw_text": full_text,
             "ocr_confidence": float(confidence),
+            "overall_confidence": float(confidence),
             "word_count": len(full_text.split()),
             "ocr_backend": self.backend
         }

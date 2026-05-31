@@ -9,13 +9,17 @@ import os
 
 # Database URL - using SQLite for development
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./invoice_forecast.db")
+DEBUG_SQL = os.getenv("DEBUG_SQL", "false").lower() == "true"
+
+is_sqlite = "sqlite" in DATABASE_URL
+is_sqlite_memory = DATABASE_URL.endswith(":memory:") or DATABASE_URL == "sqlite://"
 
 # Create engine with SQLite-specific configurations
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-    poolclass=StaticPool if "sqlite" in DATABASE_URL else None,
-    echo=True  # Set to False in production
+    connect_args={"check_same_thread": False} if is_sqlite else {},
+    poolclass=StaticPool if is_sqlite_memory else None,
+    echo=DEBUG_SQL
 )
 
 # Create session factory
@@ -34,7 +38,9 @@ def get_db():
 def create_tables():
     """Create all tables in the database"""
     from .models import Base
+    from .migrations import run_minimal_migrations
     Base.metadata.create_all(bind=engine)
+    run_minimal_migrations(engine)
     print("✅ Database tables created successfully!")
 
 

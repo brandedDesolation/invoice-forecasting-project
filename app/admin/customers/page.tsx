@@ -4,16 +4,17 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import AdminLayout from "../../../components/AdminLayout";
+import { AdminPageSkeleton } from "../../../components/Skeleton";
 import { Plus, Search, Mail, Phone, MapPin, Users, X } from "lucide-react";
-import { customerApi, invoiceApi, Customer, Invoice, getErrorMessage } from "../../../lib/api";
+import { customerApi, CustomerSummary, getErrorMessage } from "../../../lib/api";
 
 // Mock data removed - now using real API data
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [customerInvoiceCounts, setCustomerInvoiceCounts] = useState<Record<number, number>>({});
-  const [customerInvoices, setCustomerInvoices] = useState<Record<number, Invoice[]>>({});
+  const [customerInvoiceTotals, setCustomerInvoiceTotals] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
   const [filterWithInvoices, setFilterWithInvoices] = useState<boolean | null>(null);
@@ -21,7 +22,7 @@ export default function CustomersPage() {
   
   // Delete confirmation state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [customerToDelete, setCustomerToDelete] = useState<CustomerSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -29,26 +30,16 @@ export default function CustomersPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const customersData = await customerApi.getCustomers();
-        
-        // Fetch invoice counts and invoices for each customer
+        const customersData = await customerApi.getCustomerSummaries(0, 1000);
         const counts: Record<number, number> = {};
-        const invoicesMap: Record<number, Invoice[]> = {};
-        await Promise.all(
-          customersData.map(async (customer) => {
-            try {
-              const invoices = await invoiceApi.getInvoicesByCustomer(customer.id);
-              counts[customer.id] = invoices.length;
-              invoicesMap[customer.id] = invoices;
-            } catch (err) {
-              counts[customer.id] = 0;
-              invoicesMap[customer.id] = [];
-            }
-          })
-        );
+        const totals: Record<number, number> = {};
+        customersData.forEach((customer) => {
+          counts[customer.id] = customer.invoice_count;
+          totals[customer.id] = customer.total_amount;
+        });
         
         setCustomerInvoiceCounts(counts);
-        setCustomerInvoices(invoicesMap);
+        setCustomerInvoiceTotals(totals);
         setCustomers(customersData);
         setError("");
       } catch (err) {
@@ -70,7 +61,7 @@ export default function CustomersPage() {
     router.push(`/admin/customers/view/${customerId}`);
   };
 
-  const handleDeleteClick = (customer: Customer) => {
+  const handleDeleteClick = (customer: CustomerSummary) => {
     setCustomerToDelete(customer);
     setDeleteModalOpen(true);
   };
@@ -91,7 +82,7 @@ export default function CustomersPage() {
         delete updated[customerToDelete.id];
         return updated;
       });
-      setCustomerInvoices(prev => {
+      setCustomerInvoiceTotals(prev => {
         const updated = { ...prev };
         delete updated[customerToDelete.id];
         return updated;
@@ -140,9 +131,7 @@ export default function CustomersPage() {
   });
 
   // Calculate summary statistics
-  const totalRevenue = Object.values(customerInvoices).reduce((sum, invoices) => {
-    return sum + invoices.reduce((invoiceSum, invoice) => invoiceSum + invoice.total, 0);
-  }, 0);
+  const totalRevenue = Object.values(customerInvoiceTotals).reduce((sum, total) => sum + total, 0);
 
   const totalInvoices = Object.values(customerInvoiceCounts).reduce((sum, count) => sum + count, 0);
   const averageInvoice = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
@@ -152,9 +141,7 @@ export default function CustomersPage() {
     return (
       <ProtectedRoute>
         <AdminLayout currentPage="customers">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-white">Loading customers...</div>
-          </div>
+          <AdminPageSkeleton title="Loading customer summaries..." />
         </AdminLayout>
       </ProtectedRoute>
     );
@@ -286,7 +273,10 @@ export default function CustomersPage() {
                 </select>
               </div>
               
-              <button className="mt-4 sm:mt-0 flex items-center px-4 py-2 bg-transparent hover:bg-transparent text-white font-medium rounded-md border border-white/30 transition-colors">
+              <button
+                onClick={() => router.push("/admin/customers/create")}
+                className="mt-4 sm:mt-0 flex items-center px-4 py-2 bg-white text-black hover:bg-gray-200 font-medium rounded-md border border-white/30 transition-colors"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Customer
               </button>
@@ -394,15 +384,17 @@ export default function CustomersPage() {
                     : "No customers without invoices found."
                   }
                 </p>
+                {filterWithInvoices === null && !searchTerm && (
+                  <button
+                    onClick={() => router.push("/admin/customers/create")}
+                    className="mt-6 inline-flex items-center px-4 py-2 bg-white text-black rounded-md hover:bg-gray-200 transition-colors font-medium"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Customer
+                  </button>
+                )}
               </div>
             )}
-
-            {/* Load More */}
-            <div className="mt-12 text-center">
-              <button className="px-6 py-2 border border-white/20 rounded-md text-white/70 hover:text-white hover:bg-transparent transition-colors">
-                Load More Customers
-              </button>
-            </div>
           </div>
         </section>
 

@@ -3,11 +3,12 @@ Customer CRUD operations
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 
 from ..database import get_db
-from ..schemas import Customer, CustomerCreate, CustomerUpdate
+from ..schemas import Customer, CustomerCreate, CustomerSummary, CustomerUpdate
 from .. import models
 
 router = APIRouter()
@@ -18,6 +19,31 @@ async def get_customers(skip: int = 0, limit: int = 100, db: Session = Depends(g
     """Get all customers with pagination"""
     customers = db.query(models.Customer).offset(skip).limit(limit).all()
     return customers
+
+
+@router.get("/summary", response_model=List[CustomerSummary])
+async def get_customer_summaries(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get customers with invoice counts and total invoice amount in one query."""
+    rows = (
+        db.query(
+            models.Customer,
+            func.count(models.Invoice.id).label("invoice_count"),
+            func.coalesce(func.sum(models.Invoice.total), 0.0).label("total_amount"),
+        )
+        .outerjoin(models.Invoice, models.Invoice.customer_id == models.Customer.id)
+        .group_by(models.Customer.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    summaries = []
+    for customer, invoice_count, total_amount in rows:
+        summary = CustomerSummary.model_validate(customer)
+        summary.invoice_count = int(invoice_count or 0)
+        summary.total_amount = float(total_amount or 0.0)
+        summaries.append(summary)
+    return summaries
 
 
 @router.get("/{customer_id}", response_model=Customer)

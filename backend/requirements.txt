@@ -17,6 +17,7 @@ openpyxl>=3.1.5
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-dotenv>=1.0.1
+google-auth>=2.40.0
 
 # Validation
 pydantic>=2.10.0
@@ -34,5 +35,7 @@ pytesseract>=0.3.10  # Primary OCR (requires Tesseract installed on system)
 Pillow>=10.0.0
 opencv-python-headless>=4.8.0  # Headless version for servers
 python-dateutil>=2.8.2
+pypdf>=6.0.0
+pypdfium2>=5.0.0
 # easyocr>=1.7.0  # Optional: uncomment if you want EasyOCR as fallback
 

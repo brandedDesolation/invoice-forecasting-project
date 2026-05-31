@@ -8,8 +8,10 @@ import { ArrowLeft, Save, Loader2, Plus, Trash2 } from "lucide-react";
 import { 
   invoiceApi, 
   customerApi,
+  supplierApi,
   Invoice, 
   Customer,
+  Supplier,
   InvoiceUpdate,
   InvoiceItem,
   InvoiceItemUpdateRequest,
@@ -25,6 +27,7 @@ export default function EditInvoicePage() {
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState<string>("");
@@ -46,13 +49,15 @@ export default function EditInvoicePage() {
       setLoading(true);
       setApiError("");
       try {
-        const [invoiceData, customersData] = await Promise.all([
+        const [invoiceData, customersData, suppliersData] = await Promise.all([
           invoiceApi.getInvoice(parseInt(invoiceId)),
           customerApi.getCustomers(0, 1000),
+          supplierApi.getSuppliers(0, 1000),
         ]);
         
         setInvoice(invoiceData);
         setCustomers(customersData);
+        setSuppliers(suppliersData);
         
         // Calculate default status if not set
         let defaultStatus = invoiceData.status || "";
@@ -309,7 +314,7 @@ export default function EditInvoicePage() {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-2 bg-transparent text-white focus:outline-none"
+                  className="w-full px-4 py-2 bg-transparent border border-gray-700 rounded-md text-white focus:outline-none focus:border-gray-600"
                 >
                   <option value="pending">Pending</option>
                   <option value="overdue">Overdue</option>
@@ -354,15 +359,12 @@ export default function EditInvoicePage() {
                     className="w-full px-4 py-2 bg-transparent border border-gray-700 rounded-md text-white focus:outline-none focus:border-gray-600"
                   >
                     <option value="">Select a supplier</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name}
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Note: Currently using customers as suppliers. Supplier management coming soon.
-                  </p>
                 </div>
               </div>
 

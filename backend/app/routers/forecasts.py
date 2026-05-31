@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from ..database import get_db
-from ..schemas import Forecast, ForecastCreate
+from ..schemas import Forecast, ForecastCreate, ForecastPredictionResponse
 from .. import models
+from ..services.audit_service import create_audit_event
+from ..services.forecast_service import build_forecast, get_latest_forecast_insight
 
 router = APIRouter()
 
@@ -18,6 +20,20 @@ async def get_forecasts(skip: int = 0, limit: int = 100, db: Session = Depends(g
     """Get all forecasts with pagination"""
     forecasts = db.query(models.Forecast).offset(skip).limit(limit).all()
     return forecasts
+
+
+@router.get("/invoice/{invoice_id}", response_model=List[Forecast])
+async def get_forecasts_by_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """Get all forecasts for a specific invoice"""
+    forecasts = db.query(models.Forecast).filter(models.Forecast.invoice_id == invoice_id).all()
+    return forecasts
+
+
+@router.get("/invoice/{invoice_id}/latest")
+async def get_latest_forecast(invoice_id: int, db: Session = Depends(get_db)):
+    """Get the latest forecast insight for a specific invoice"""
+    insight = get_latest_forecast_insight(invoice_id, db)
+    return insight
 
 
 @router.get("/{forecast_id}", response_model=Forecast)
@@ -32,62 +48,53 @@ async def get_forecast(forecast_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=Forecast)
 async def create_forecast(forecast: ForecastCreate, db: Session = Depends(get_db)):
     """Create a new forecast"""
-    
-    # Verify invoice exists
     invoice = db.query(models.Invoice).filter(models.Invoice.id == forecast.invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=400, detail="Invoice not found")
-    
+
     db_forecast = models.Forecast(**forecast.dict())
     db.add(db_forecast)
+    db.flush()
+    create_audit_event(
+        db,
+        invoice_id=db_forecast.invoice_id,
+        event_type="forecast_created",
+        title="Forecast created",
+        message="A payment forecast was manually created.",
+        metadata={"forecast_id": db_forecast.id},
+    )
     db.commit()
     db.refresh(db_forecast)
     return db_forecast
 
 
-@router.get("/invoice/{invoice_id}", response_model=List[Forecast])
-async def get_forecasts_by_invoice(invoice_id: int, db: Session = Depends(get_db)):
-    """Get all forecasts for a specific invoice"""
-    forecasts = db.query(models.Forecast).filter(models.Forecast.invoice_id == invoice_id).all()
-    return forecasts
-
-
-@router.post("/predict/{invoice_id}")
+@router.post("/predict/{invoice_id}", response_model=ForecastPredictionResponse)
 async def predict_payment_date(invoice_id: int, db: Session = Depends(get_db)):
-    """Generate AI prediction for payment date (placeholder for ML integration)"""
-    
-    # Verify invoice exists
+    """Generate a payment prediction using invoice history and payment behavior"""
     invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
-    # TODO: Integrate with ML model when ready
-    # For now, return a placeholder prediction
-    
-    from datetime import date, timedelta
-    import random
-    
-    # Simple placeholder logic - predict payment 30 days after due date
-    predicted_date = invoice.due_date + timedelta(days=30) if invoice.due_date else invoice.issue_date + timedelta(days=30)
-    confidence = random.uniform(0.7, 0.95)  # Random confidence between 70-95%
-    risk_score = random.uniform(0.1, 0.4)   # Random risk between 10-40%
-    
-    forecast_data = ForecastCreate(
+    if (invoice.approval_status or "pending").lower() != "approved":
+        raise HTTPException(status_code=400, detail="Invoice must be approved before a payment forecast is generated")
+
+    try:
+        forecast, insight = build_forecast(invoice_id, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    create_audit_event(
+        db,
         invoice_id=invoice_id,
-        predicted_payment_date=predicted_date,
-        confidence_score=confidence,
-        prediction_method="STATISTICAL_PLACEHOLDER",
-        risk_score=risk_score,
-        notes="Placeholder prediction - ML model integration pending"
+        event_type="forecast_generated",
+        title="Forecast generated",
+        message="A payment-risk forecast was generated.",
+        actor="VICAI",
+        metadata={"forecast_id": forecast.id, "risk_level": insight.get("risk_level")},
     )
-    
-    db_forecast = models.Forecast(**forecast_data.dict())
-    db.add(db_forecast)
     db.commit()
-    db.refresh(db_forecast)
-    
+
     return {
         "message": "Prediction generated successfully",
-        "forecast": db_forecast,
-        "note": "This is a placeholder prediction. ML model integration will be added later."
+        "forecast": forecast,
+        "insight": insight,
     }

@@ -1,10 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authService, LoginCredentials } from "../lib/auth";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+
+const demoAccounts = [
+  {
+    label: "Project Admin",
+    description: "Full demo owner account",
+    email: "admin@invoiceforecast.com",
+    password: "admin123",
+  },
+  {
+    label: "Finance Manager",
+    description: "Approvals, workflow, reports",
+    email: "manager@vicai.demo",
+    password: "manager123",
+  },
+  {
+    label: "AP Specialist",
+    description: "Invoices, review queue, payments",
+    email: "accountant@vicai.demo",
+    password: "accountant123",
+  },
+  {
+    label: "Internal Auditor",
+    description: "Audit trail and analytics review",
+    email: "auditor@vicai.demo",
+    password: "auditor123",
+  },
+];
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          renderButton: (element: HTMLElement, options: Record<string, string | boolean>) => void;
+        };
+      };
+    };
+  }
+}
 
 export default function LoginForm() {
   const [credentials, setCredentials] = useState<LoginCredentials>({
@@ -14,7 +57,55 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showDemoCredentials, setShowDemoCredentials] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const router = useRouter();
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) return;
+
+    const initializeGoogle = () => {
+      if (!window.google || !googleButtonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response) => {
+          if (!response.credential) {
+            setError("Google did not return a credential");
+            return;
+          }
+
+          setLoading(true);
+          setError("");
+          const result = await authService.loginWithGoogle(response.credential);
+          setLoading(false);
+          if (result.success) {
+            router.push("/admin/dashboard");
+          } else {
+            setError(result.error || "Google sign-in failed");
+          }
+        },
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: "100%",
+        text: "continue_with",
+      });
+    };
+
+    if (window.google) {
+      initializeGoogle();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogle;
+    document.head.appendChild(script);
+  }, [googleClientId, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,6 +184,17 @@ export default function LoginForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+              {googleClientId && (
+                <>
+                  <div ref={googleButtonRef} className="min-h-[44px]" />
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-gray-700" />
+                    <span className="text-xs uppercase tracking-wide text-gray-500">or email login</span>
+                    <div className="h-px flex-1 bg-gray-700" />
+                  </div>
+                </>
+              )}
+
               {/* Email Field */}
               <div>
                 <input
@@ -154,23 +256,43 @@ export default function LoginForm() {
               </button>
             </form>
 
-            {/* Demo Accounts */}
+            {/* Demo Login */}
             <div className="mt-8 pt-6 border-t border-gray-700/50 relative z-10">
-              <p className="text-center text-gray-400 text-sm mb-4">Demo Accounts</p>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-gray-300">
-                  <span>Admin:</span>
-                  <span className="text-white font-mono">admin@invoiceforecast.com</span>
+              <button
+                type="button"
+                onClick={() => setShowDemoCredentials((value) => !value)}
+                className="w-full text-center text-gray-400 hover:text-white text-sm transition-colors"
+              >
+                {showDemoCredentials ? "Hide demo accounts" : "Use demo account"}
+              </button>
+              {showDemoCredentials && (
+                <div className="mt-4 space-y-3 text-sm rounded-md border border-gray-700/50 bg-black/20 p-4">
+                  <p className="text-center text-gray-400">
+                    Choose a realistic demo persona. All accounts use real backend JWT login.
+                  </p>
+                  {demoAccounts.map((account) => (
+                    <button
+                      key={account.email}
+                      type="button"
+                      onClick={() => setCredentials({ email: account.email, password: account.password })}
+                      className="w-full rounded-md border border-white/10 px-3 py-3 text-left text-white hover:border-white/30 hover:bg-white/10 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{account.label}</p>
+                          <p className="text-xs text-gray-400">{account.description}</p>
+                        </div>
+                        <span className="rounded-full border border-white/10 px-2 py-1 text-xs text-gray-300">Fill</span>
+                      </div>
+                      <div className="mt-2 text-xs text-gray-400">
+                        <span className="font-mono text-gray-200">{account.email}</span>
+                        <span className="mx-2">/</span>
+                        <span className="font-mono text-gray-200">{account.password}</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex justify-between text-gray-300">
-                  <span>User:</span>
-                  <span className="text-white font-mono">user@company.com</span>
-                </div>
-                <div className="flex justify-between text-gray-300">
-                  <span>Demo:</span>
-                  <span className="text-white font-mono">demo@demo.com</span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
 

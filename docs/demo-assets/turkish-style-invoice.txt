@@ -1,0 +1,26 @@
+VICAI DEMO FATURA
+
+Fatura No: DEMO-TR-2026-014
+Fatura Tarihi: 30.05.2026
+Vade Tarihi: 29.06.2026
+
+Satici:
+Bosphorus Office Supply
+Vergi No: TR9008007002
+E-posta: invoice@bosphorusoffice.com
+Adres: Sisli, Istanbul
+
+Alici:
+Nova Retail Group
+Vergi No: TR1002003002
+E-posta: ap@novaretail.com
+Adres: Atasehir, Istanbul
+
+Kalemler:
+1. Ofis donanim ve sarf malzemeleri - Adet 1 - Birim 46750.00 - Tutar 46750.00
+
+Ara Toplam: 46750.00
+KDV: 9350.00
+Genel Toplam: 56100.00 TL
+
+Odeme Kosulu: 30 gun

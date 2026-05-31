@@ -10,7 +10,13 @@ import {
   TrendingUp, 
   DollarSign,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Bell,
+  Clock3,
+  ShieldAlert,
+  ShoppingCart,
+  ReceiptText,
+  BookOpen
 } from "lucide-react";
 import { 
   analyticsApi, 
@@ -18,9 +24,17 @@ import {
   customerApi,
   AnalyticsOverview,
   Invoice,
-  Customer,
-  getErrorMessage 
+  SupplierAnalyticsSummary,
+  WorkflowSummary,
+  getErrorMessage,
+  purchaseOrderApi,
+  expenseApi,
+  ledgerApi,
+  PurchaseOrder,
+  Expense,
+  LedgerSummary
 } from "../../../lib/api";
+import { workflowApi } from "../../../lib/api";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -29,6 +43,11 @@ export default function AdminDashboard() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [totalCustomers, setTotalCustomers] = useState(0);
+  const [workflowSummary, setWorkflowSummary] = useState<WorkflowSummary | null>(null);
+  const [supplierInsights, setSupplierInsights] = useState<SupplierAnalyticsSummary | null>(null);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -36,9 +55,21 @@ export default function AdminDashboard() {
         setLoading(true);
         setError("");
         
-        // Fetch analytics overview
-        const analyticsData = await analyticsApi.getOverview(30);
+        // Fetch analytics overview and workflow context
+        const [analyticsData, workflowData, supplierData, poData, expenseData, ledgerData] = await Promise.all([
+          analyticsApi.getOverview(30),
+          workflowApi.getSummary(),
+          analyticsApi.getSupplierInsights(30, 3),
+          purchaseOrderApi.getPurchaseOrders(),
+          expenseApi.getExpenses(),
+          ledgerApi.getSummary(),
+        ]);
         setOverview(analyticsData);
+        setWorkflowSummary(workflowData);
+        setSupplierInsights(supplierData);
+        setPurchaseOrders(poData);
+        setExpenses(expenseData);
+        setLedgerSummary(ledgerData);
         
         // Fetch recent invoices
         const invoices = await invoiceApi.getInvoices(0, 5);
@@ -190,72 +221,174 @@ export default function AdminDashboard() {
       changeType: overview.invoices.overdue_invoices > 0 ? "negative" : "positive",
       icon: AlertTriangle,
     },
+    {
+      name: "Purchase Orders",
+      value: purchaseOrders.length.toString(),
+      change: `${purchaseOrders.filter((order) => order.status === "approved").length} approved`,
+      changeType: "positive" as const,
+      icon: ShoppingCart,
+    },
+    {
+      name: "Expenses",
+      value: formatCurrencyShort(expenses.reduce((sum, expense) => sum + expense.total, 0)),
+      change: `${expenses.filter((expense) => expense.approval_status === "pending").length} pending`,
+      changeType: expenses.some((expense) => expense.approval_status === "pending") ? "negative" : "positive",
+      icon: ReceiptText,
+    },
+    {
+      name: "Ledger Balance",
+      value: formatCurrencyShort(ledgerSummary?.balance || 0),
+      change: "posted",
+      changeType: "positive" as const,
+      icon: BookOpen,
+    },
+  ] : [];
+
+  const actionCenterItems = overview ? [
+    {
+      name: "Due Soon",
+      value: workflowSummary?.due_soon || 0,
+      description: "Invoices due in the next 7 days",
+      detail: workflowSummary?.due_soon_invoices[0]
+        ? `${workflowSummary.due_soon_invoices[0].invoice_number} due ${
+            workflowSummary.due_soon_invoices[0].due_date ? formatDate(workflowSummary.due_soon_invoices[0].due_date) : "N/A"
+          }`
+        : "No immediate due invoices",
+      icon: Clock3,
+      actionLabel: "Open Workflow",
+      onClick: () => router.push("/admin/workflow"),
+    },
+    {
+      name: "Overdue Risk",
+      value: overview.invoices.overdue_invoices,
+      description: "Invoices already past due",
+      detail: `${formatCurrencyShort(overview.revenue.overdue_revenue)} overdue revenue`,
+      icon: ShieldAlert,
+      actionLabel: "Open Analytics",
+      onClick: () => router.push("/admin/analytics"),
+    },
+    {
+      name: "Review Required",
+      value: overview.ai_automation.review_required_count,
+      description: "Documents waiting for human review",
+      detail: `${overview.ai_automation.corrected_runs} corrected extractions so far`,
+      icon: Bell,
+      actionLabel: "Open Review Queue",
+      onClick: () => router.push("/admin/review"),
+    },
+    {
+      name: "Supplier Concentration",
+      value: `${((supplierInsights?.largest_supplier_share || 0) * 100).toFixed(1)}%`,
+      description: "Largest supplier share in the last 30 days",
+      detail: supplierInsights?.largest_supplier
+        ? `${supplierInsights.largest_supplier.supplier_name} leads supplier spend`
+        : "No supplier concentration data yet",
+      icon: TrendingUp,
+      actionLabel: "Open Suppliers",
+      onClick: () => router.push("/admin/suppliers"),
+    },
   ] : [];
 
   return (
     <ProtectedRoute>
       <AdminLayout currentPage="dashboard">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Dashboard Overview</h1>
-          <p className="text-gray-400">Monitor your business performance and key metrics</p>
+        <div className="mb-8 rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900/80 to-black p-6">
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/40">Finance cockpit</p>
+          <h1 className="mt-3 text-3xl font-bold text-white">FATURASM Dashboard</h1>
+          <p className="mt-2 max-w-3xl text-gray-400">
+            Monitor invoices, approvals, payments, purchase orders, expenses, and ledger health from one workspace.
+          </p>
         </div>
 
-            {/* Key Metrics */}
-            <div className="mb-32">
-              <h3 className="text-xl font-semibold text-white mb-10">Key Metrics</h3>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                {stats.map((stat) => (
-                  <div
-                    key={stat.name}
-                    className="p-6 border border-gray-700 rounded-lg w-full"
-                  >
-                    <p className="text-sm text-gray-400 font-medium mb-4">{stat.name}</p>
-                    <p className="text-3xl font-bold text-white mb-4 truncate">{stat.value}</p>
-                    <div className="flex items-center">
-                      <span className={`text-sm font-medium ${
-                        stat.changeType === "positive" ? "text-green-500" : "text-red-500"
-                      }`}>
-                        {stat.change}
-                      </span>
-                      <span className="text-sm text-gray-500 ml-2">from last period</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="space-y-10">
+          {/* Key Metrics */}
+          <section>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Key Metrics</h3>
+              <span className="text-sm text-gray-500">Last 30 days</span>
             </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {stats.map((stat) => (
+                <div
+                  key={stat.name}
+                  className="rounded-xl border border-gray-800 bg-gray-900/40 p-5 shadow-lg shadow-black/20"
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-400">{stat.name}</p>
+                    <stat.icon className="h-5 w-5 text-white/40" />
+                  </div>
+                  <p className="truncate text-2xl font-bold text-white">{stat.value}</p>
+                  <div className="mt-3 flex items-center text-sm">
+                    <span className={`font-medium ${
+                      stat.changeType === "positive" ? "text-green-400" : "text-red-400"
+                    }`}>
+                      {stat.change}
+                    </span>
+                    <span className="ml-2 text-gray-500">from last period</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
 
-            {/* Recent Invoices */}
-            <div className="mb-32">
-              <h3 className="text-xl font-semibold text-white mb-10">Recent Invoices</h3>
+          <section>
+            <h3 className="mb-4 text-lg font-semibold text-white">Action Center</h3>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {actionCenterItems.map((item) => (
+                <div key={item.name} className="rounded-xl border border-gray-800 bg-gray-900/40 p-5 shadow-lg shadow-black/20">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">{item.name}</p>
+                      <p className="mt-2 text-2xl font-bold text-white">{item.value}</p>
+                      <p className="mt-2 text-sm text-white/70">{item.description}</p>
+                      <p className="mt-1 text-sm text-white/50">{item.detail}</p>
+                    </div>
+                    <item.icon className="h-6 w-6 shrink-0 text-white/50" />
+                  </div>
+                  <button
+                    onClick={item.onClick}
+                    className="mt-5 rounded-md border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-white/40 hover:bg-white/5"
+                  >
+                    {item.actionLabel}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Recent Invoices */}
+          <section>
+            <h3 className="mb-4 text-lg font-semibold text-white">Recent Invoices</h3>
+            <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/30 shadow-lg shadow-black/20">
               {recentInvoices.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full">
+                  <table className="min-w-full divide-y divide-gray-800">
                     <thead>
                       <tr>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Invoice</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Customer</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Due Date</th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">Invoice</th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">Customer</th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">Amount</th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">Status</th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">Due Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
                       {recentInvoices.map((invoice) => (
                         <tr key={invoice.id} className="hover:bg-gray-800/30 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">
+                          <td className="px-5 py-4 text-sm font-medium">
                             <button
                               onClick={() => router.push(`/admin/invoices/view/${invoice.id}`)}
-                              className="text-white hover:text-blue-400 hover:underline transition-colors"
+                              className="text-white transition-colors hover:text-blue-400 hover:underline"
                             >
                               {invoice.invoice_number}
                             </button>
                           </td>
-                          <td className="px-6 py-4 text-sm">
+                          <td className="px-5 py-4 text-sm">
                             {invoice.customer ? (
                               <button
                                 onClick={() => router.push(`/admin/customers/view/${invoice.customer_id}`)}
-                                className="text-gray-400 hover:text-blue-400 hover:underline transition-colors"
+                                className="text-gray-400 transition-colors hover:text-blue-400 hover:underline"
                               >
                                 {invoice.customer.name}
                               </button>
@@ -263,11 +396,11 @@ export default function AdminDashboard() {
                               <span className="text-gray-400">N/A</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-400">{formatCurrency(invoice.total)}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-4 text-sm text-gray-400">{formatCurrency(invoice.total)}</td>
+                          <td className="px-5 py-4">
                             {getStatusBadge(invoice)}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-400">
+                          <td className="px-5 py-4 text-sm text-gray-400">
                             {invoice.due_date ? formatDate(invoice.due_date) : "N/A"}
                           </td>
                         </tr>
@@ -283,6 +416,8 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+          </section>
+        </div>
       </AdminLayout>
     </ProtectedRoute>
   );

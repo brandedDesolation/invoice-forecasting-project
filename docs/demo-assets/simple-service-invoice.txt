@@ -1,0 +1,25 @@
+VICAI DEMO INVOICE
+
+Invoice Number: DEMO-SERVICE-2026-001
+Issue Date: 2026-05-30
+Due Date: 2026-06-29
+
+Supplier:
+Atlas Cloud Services
+Tax ID: TR9008007001
+Email: billing@atlascloud.com
+
+Customer:
+Anka Robotics A.S.
+Tax ID: TR1002003001
+Email: finance@ankarobotics.com
+
+Line Items:
+1. Cloud infrastructure subscription - Qty 1 - Unit 85000.00 - Total 85000.00
+2. Support and monitoring package - Qty 1 - Unit 27000.00 - Total 27000.00
+
+Subtotal: 112000.00
+VAT: 22400.00
+Total: 134400.00 TRY
+
+Payment Terms: Net 30

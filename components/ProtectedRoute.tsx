@@ -9,26 +9,37 @@ interface ProtectedRouteProps {
   requireAdmin?: boolean;
 }
 
-function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+function ProtectedRoute({ children, requireAdmin = true }: ProtectedRouteProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    
-    if (!currentUser) {
-      router.push("/admin/login");
-      return;
-    }
+    const verifyUser = async () => {
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) {
+        router.push("/admin/login");
+        return;
+      }
 
-    if (requireAdmin && !authService.isAdmin()) {
-      router.push("/admin/dashboard");
-      return;
-    }
+      const refreshedUser = await authService.refreshCurrentUser();
+      if (!refreshedUser) {
+        router.push("/admin/login");
+        return;
+      }
 
-    setUser(currentUser);
-    setLoading(false);
+      const allowedRoles = ["admin", "finance_manager", "accountant", "auditor"];
+      if (requireAdmin && !allowedRoles.includes(refreshedUser.role)) {
+        await authService.logout();
+        router.push("/admin/login");
+        return;
+      }
+
+      setUser(refreshedUser);
+      setLoading(false);
+    };
+
+    verifyUser();
   }, [router, requireAdmin]);
 
   if (loading) {

@@ -1,21 +1,43 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProtectedRoute from "../../../components/ProtectedRoute";
 import AdminLayout from "../../../components/AdminLayout";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useToast, ToastContainer } from "../../../components/Toast";
-import { Search, Filter, FileText, Calendar, DollarSign, Eye, Download, Upload, Trash2 } from "lucide-react";
-import { invoiceApi, Invoice, getErrorMessage } from "../../../lib/api";
+import { Search, FileText, Eye, Download, Upload, X } from "lucide-react";
+import { invoiceApi, supplierApi, Invoice, Supplier, getErrorMessage } from "../../../lib/api";
+import { downloadCsv } from "../../../lib/csv";
 
 export default function InvoicesPage() {
+  return (
+    <Suspense
+      fallback={
+        <ProtectedRoute>
+          <AdminLayout currentPage="invoices">
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-white">Loading invoices...</div>
+            </div>
+          </AdminLayout>
+        </ProtectedRoute>
+      }
+    >
+      <InvoicesPageContent />
+    </Suspense>
+  );
+}
+
+function InvoicesPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date");
   const [sortOrder, setSortOrder] = useState("desc");
@@ -36,8 +58,12 @@ export default function InvoicesPage() {
     const fetchInvoices = async () => {
       try {
         setLoading(true);
-        const data = await invoiceApi.getInvoices();
-        setInvoices(data);
+        const [invoiceData, supplierData] = await Promise.all([
+          invoiceApi.getInvoices(),
+          supplierApi.getSuppliers(0, 1000),
+        ]);
+        setInvoices(invoiceData);
+        setSuppliers(supplierData);
         setApiError("");
       } catch (err) {
         console.error("Error fetching invoices:", err);
@@ -49,6 +75,15 @@ export default function InvoicesPage() {
 
     fetchInvoices();
   }, []);
+
+  useEffect(() => {
+    const supplierId = searchParams.get("supplier");
+    if (supplierId && /^\d+$/.test(supplierId)) {
+      setSupplierFilter(supplierId);
+      return;
+    }
+    setSupplierFilter("all");
+  }, [searchParams]);
 
   const handleViewInvoice = (invoiceId: number) => {
     router.push(`/admin/invoices/view/${invoiceId}`);
@@ -141,7 +176,32 @@ export default function InvoicesPage() {
     }
   };
 
-  const filteredAndSortedInvoices = invoices
+  const handleExportInvoices = () => {
+    if (filteredAndSortedInvoices.length === 0) {
+      error("Export Failed", "There are no invoices to export with the current filters.");
+      return;
+    }
+
+    downloadCsv(
+      `vicai-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Invoice", "Customer", "Supplier", "Issue Date", "Due Date", "Subtotal", "Tax", "Total", "Status", "Approval"],
+      filteredAndSortedInvoices.map((invoice) => [
+        invoice.invoice_number,
+        invoice.customer?.name || "",
+        invoice.supplier?.name || "",
+        invoice.issue_date,
+        invoice.due_date || "",
+        invoice.subtotal,
+        invoice.tax,
+        invoice.total,
+        invoice.status || "pending",
+        invoice.approval_status || "pending",
+      ])
+    );
+    success("Export Ready", `${filteredAndSortedInvoices.length} invoice(s) exported to CSV.`);
+  };
+
+  const filteredInvoices = useMemo(() => invoices
     .filter(invoice => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
@@ -151,6 +211,10 @@ export default function InvoicesPage() {
         invoice.total.toString().includes(searchTerm);
       
       if (!matchesSearch) return false;
+
+      if (supplierFilter !== "all" && invoice.supplier_id !== Number(supplierFilter)) {
+        return false;
+      }
       
       // Status filter
       if (statusFilter === "pending") {
@@ -206,7 +270,9 @@ export default function InvoicesPage() {
       }
       
       return true;
-    })
+    }), [customEndDate, customStartDate, dateFilter, invoices, searchTerm, statusFilter, supplierFilter]);
+
+  const filteredAndSortedInvoices = useMemo(() => [...filteredInvoices]
     .sort((a, b) => {
       let comparison = 0;
       
@@ -228,7 +294,43 @@ export default function InvoicesPage() {
       }
       
       return sortOrder === "desc" ? -comparison : comparison;
-    });
+    }), [filteredInvoices, sortBy, sortOrder]);
+
+  const selectedSupplier = supplierFilter === "all"
+    ? null
+    : suppliers.find((supplier) => supplier.id === Number(supplierFilter)) || null;
+
+  const visibleTotals = useMemo(() => {
+    const totalRevenue = filteredInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
+    const pendingCount = filteredInvoices.filter((invoice) => {
+      const today = new Date();
+      const dueDate = new Date(invoice.due_date || "");
+      return !invoice.due_date || dueDate >= today;
+    }).length;
+    const overdueCount = filteredInvoices.filter((invoice) => {
+      const today = new Date();
+      const dueDate = new Date(invoice.due_date || "");
+      return Boolean(invoice.due_date) && dueDate < today;
+    }).length;
+
+    return {
+      totalRevenue,
+      pendingCount,
+      overdueCount,
+    };
+  }, [filteredInvoices]);
+
+  const updateSupplierQuery = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "all") {
+      params.delete("supplier");
+    } else {
+      params.set("supplier", value);
+    }
+
+    const queryString = params.toString();
+    router.replace(queryString ? `/admin/invoices?${queryString}` : "/admin/invoices");
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', {
@@ -395,38 +497,48 @@ export default function InvoicesPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
           <div className="p-6 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400 font-medium mb-4">Total Invoices</p>
-            <p className="text-3xl font-bold text-white">{invoices.length}</p>
+            <p className="text-3xl font-bold text-white">{filteredInvoices.length}</p>
           </div>
           
           <div className="p-6 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400 font-medium mb-4">Total Revenue</p>
             <p className="text-3xl font-bold text-white truncate">
-              {formatCurrency(invoices.reduce((sum, inv) => sum + inv.total, 0))}
+              {formatCurrency(visibleTotals.totalRevenue)}
             </p>
           </div>
           
           <div className="p-6 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400 font-medium mb-4">Pending</p>
             <p className="text-3xl font-bold text-white">
-              {invoices.filter(inv => {
-                const today = new Date();
-                const dueDate = new Date(inv.due_date || "");
-                return !inv.due_date || dueDate >= today;
-              }).length}
+              {visibleTotals.pendingCount}
             </p>
           </div>
           
           <div className="p-6 border border-gray-700 rounded-lg">
             <p className="text-sm text-gray-400 font-medium mb-4">Overdue</p>
             <p className="text-3xl font-bold text-white">
-              {invoices.filter(inv => {
-                const today = new Date();
-                const dueDate = new Date(inv.due_date || "");
-                return inv.due_date && dueDate < today;
-              }).length}
+              {visibleTotals.overdueCount}
             </p>
           </div>
         </div>
+
+        {selectedSupplier && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-white/15 bg-white/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-white">Supplier filter active</p>
+              <p className="text-sm text-white/60">
+                Showing invoices linked to <span className="text-white">{selectedSupplier.name}</span>.
+              </p>
+            </div>
+            <button
+              onClick={() => updateSupplierQuery("all")}
+              className="inline-flex items-center gap-2 rounded-md border border-white/20 px-3 py-2 text-sm text-white/80 transition-colors hover:text-white"
+            >
+              <X className="h-4 w-4" />
+              Clear
+            </button>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="mb-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -453,6 +565,22 @@ export default function InvoicesPage() {
               <option value="paid">Paid</option>
               <option value="cancelled">Cancelled</option>
               <option value="void">Void</option>
+            </select>
+
+            <select
+              value={supplierFilter}
+              onChange={(e) => {
+                setSupplierFilter(e.target.value);
+                updateSupplierQuery(e.target.value);
+              }}
+              className="px-3 py-2 border border-white/20 rounded-md bg-transparent text-white focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-transparent"
+            >
+              <option value="all">All Suppliers</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id.toString()}>
+                  {supplier.name}
+                </option>
+              ))}
             </select>
 
             <select
@@ -522,7 +650,10 @@ export default function InvoicesPage() {
               <Upload className="h-4 w-4 mr-2" />
               Upload Invoice
             </button>
-            <button className="flex items-center px-3 py-2 border border-white/20 rounded-md text-white/70 hover:text-white hover:bg-transparent transition-colors">
+            <button
+              onClick={handleExportInvoices}
+              className="flex items-center px-3 py-2 border border-white/20 rounded-md text-white/70 hover:text-white hover:bg-transparent transition-colors"
+            >
               <Download className="h-4 w-4 mr-2" />
               Export
             </button>
@@ -676,11 +807,20 @@ export default function InvoicesPage() {
             <FileText className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-white">No invoices found</h3>
             <p className="mt-1 text-sm text-gray-400">
-              {searchTerm || statusFilter !== "all" 
+              {searchTerm || statusFilter !== "all" || supplierFilter !== "all" || dateFilter !== "all"
                 ? "Try adjusting your search or filter criteria."
                 : "No invoices have been processed yet."
               }
             </p>
+            {!searchTerm && statusFilter === "all" && supplierFilter === "all" && dateFilter === "all" && (
+              <button
+                onClick={() => router.push("/admin/invoices/upload")}
+                className="mt-6 inline-flex items-center px-4 py-2 bg-white text-black rounded-md hover:bg-gray-200 transition-colors font-medium"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload First Invoice
+              </button>
+            )}
           </div>
         )}
       </AdminLayout>

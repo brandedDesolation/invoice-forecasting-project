@@ -2,14 +2,17 @@
 Invoice CRUD operations
 """
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import date
 
 from ..database import get_db
-from ..schemas import Invoice, InvoiceCreate, InvoiceUpdate, InvoiceItemCreate, InvoiceItemUpdateRequest
+from ..schemas import AuditEvent, Invoice, InvoiceCreate, InvoiceUpdate, InvoiceItemCreate, InvoiceItemUpdateRequest
 from .. import models
+from ..services.audit_service import create_audit_event
 
 router = APIRouter()
 
@@ -40,21 +43,6 @@ async def get_invoices(
     return invoices
 
 
-@router.get("/{invoice_id}", response_model=Invoice)
-async def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
-    """Get invoice by ID"""
-    from sqlalchemy.orm import joinedload
-    
-    invoice = db.query(models.Invoice).options(
-        joinedload(models.Invoice.customer),
-        joinedload(models.Invoice.supplier),
-        joinedload(models.Invoice.items)
-    ).filter(models.Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
-    return invoice
-
-
 @router.post("/", response_model=Invoice)
 async def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     """Create a new invoice with line items"""
@@ -70,6 +58,8 @@ async def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     
     # Create invoice
     invoice_data = invoice.dict(exclude={'items'})
+    invoice_data.setdefault("status", "pending")
+    invoice_data.setdefault("approval_status", "pending")
     db_invoice = models.Invoice(**invoice_data)
     db.add(db_invoice)
     db.flush()  # Get the invoice ID
@@ -80,10 +70,69 @@ async def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         item_data_dict['invoice_id'] = db_invoice.id
         db_item = models.InvoiceItem(**item_data_dict)
         db.add(db_item)
+
+    db.add(models.WorkflowNotification(
+        invoice_id=db_invoice.id,
+        type="approval_required",
+        title=f"Invoice {db_invoice.invoice_number} awaiting approval",
+        message="A new invoice was created and is ready for workflow approval.",
+        action_url=f"/admin/invoices/view/{db_invoice.id}",
+    ))
+    create_audit_event(
+        db,
+        invoice_id=db_invoice.id,
+        event_type="invoice_created",
+        title="Invoice created",
+        message="Invoice was manually created in VICAI.",
+        metadata={"invoice_number": db_invoice.invoice_number, "total": db_invoice.total},
+    )
     
     db.commit()
     db.refresh(db_invoice)
     return db_invoice
+
+
+@router.get("/customer/{customer_id}", response_model=List[Invoice])
+async def get_invoices_by_customer(customer_id: int, db: Session = Depends(get_db)):
+    """Get all invoices for a specific customer"""
+    invoices = db.query(models.Invoice).filter(models.Invoice.customer_id == customer_id).all()
+    return invoices
+
+
+@router.get("/supplier/{supplier_id}", response_model=List[Invoice])
+async def get_invoices_by_supplier(supplier_id: int, db: Session = Depends(get_db)):
+    """Get all invoices for a specific supplier"""
+    invoices = db.query(models.Invoice).filter(models.Invoice.supplier_id == supplier_id).all()
+    return invoices
+
+
+@router.get("/{invoice_id}", response_model=Invoice)
+async def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    """Get invoice by ID"""
+    from sqlalchemy.orm import joinedload
+
+    invoice = db.query(models.Invoice).options(
+        joinedload(models.Invoice.customer),
+        joinedload(models.Invoice.supplier),
+        joinedload(models.Invoice.items),
+        joinedload(models.Invoice.payments)
+    ).filter(models.Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
+
+
+@router.get("/{invoice_id}/audit-events", response_model=List[AuditEvent])
+async def get_invoice_audit_events(invoice_id: int, db: Session = Depends(get_db)):
+    """Get persistent audit events for an invoice."""
+    if not db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first():
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return (
+        db.query(models.AuditEvent)
+        .filter(models.AuditEvent.invoice_id == invoice_id)
+        .order_by(models.AuditEvent.created_at.asc())
+        .all()
+    )
 
 
 @router.put("/{invoice_id}", response_model=Invoice)
@@ -99,6 +148,15 @@ async def update_invoice(invoice_id: int, invoice_update: InvoiceUpdate, db: Ses
     update_data = invoice_update.dict(exclude_unset=True, exclude={'items'})
     for field, value in update_data.items():
         setattr(db_invoice, field, value)
+    if update_data:
+        create_audit_event(
+            db,
+            invoice_id=db_invoice.id,
+            event_type="invoice_updated",
+            title="Invoice updated",
+            message=f"Updated fields: {', '.join(update_data.keys())}",
+            metadata={"fields": list(update_data.keys())},
+        )
     
     # Handle items update if provided
     if invoice_update.items is not None:
@@ -141,7 +199,8 @@ async def update_invoice(invoice_id: int, invoice_update: InvoiceUpdate, db: Ses
     db_invoice = db.query(models.Invoice).options(
         joinedload(models.Invoice.customer),
         joinedload(models.Invoice.supplier),
-        joinedload(models.Invoice.items)
+        joinedload(models.Invoice.items),
+        joinedload(models.Invoice.payments)
     ).filter(models.Invoice.id == invoice_id).first()
     
     return db_invoice
@@ -153,21 +212,15 @@ async def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     db_invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
     if not db_invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
+    image_path = db_invoice.image_path
     db.delete(db_invoice)
     db.commit()
-    return {"message": "Invoice deleted successfully"}
 
+    if image_path and os.path.exists(image_path):
+        try:
+            os.remove(image_path)
+        except OSError:
+            pass
 
-@router.get("/customer/{customer_id}", response_model=List[Invoice])
-async def get_invoices_by_customer(customer_id: int, db: Session = Depends(get_db)):
-    """Get all invoices for a specific customer"""
-    invoices = db.query(models.Invoice).filter(models.Invoice.customer_id == customer_id).all()
-    return invoices
-
-
-@router.get("/supplier/{supplier_id}", response_model=List[Invoice])
-async def get_invoices_by_supplier(supplier_id: int, db: Session = Depends(get_db)):
-    """Get all invoices for a specific supplier"""
-    invoices = db.query(models.Invoice).filter(models.Invoice.supplier_id == supplier_id).all()
-    return invoices
+    return {"message": "Invoice deleted successfully", "success": True}
